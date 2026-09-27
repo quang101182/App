@@ -1,0 +1,86 @@
+--- C:\Users\quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260927-r10	2026-09-27 12:12:55.831670700 +0200
++++ C:\Users\quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-27 12:12:55.895151200 +0200
+@@ -9311,6 +9311,62 @@
+     return t
+ 
+ 
++# --- Manga Studio v2.85.0 (R10) : journal des FINS, commun a tous les appareils --------------------------------------
++_ACT_VU = {}                       # cle -> (tache, derniere fois vue en cours)
++_ACT_COUPE = [0.0]                 # dernier arret propre demande (manga_interrompre)
++_ACT_FIN_VERROU = threading.Lock()
++_ACT_FIN_ISSUE_DLG = {"arrete": "arrete", "quota": "quota", "erreur": "erreur"}
++
++
++def _act_fin_cle(it):
++    if it.get("type") in ("lot", "dialogues_lot"):                 # un lot = UNE tache (son « d » suit le chapitre en cours)
++        return it["type"] + "|" + str(it.get("titre") or "")
++    return "|".join(str(it.get(k) or "") for k in ("type", "d", "tag", "langue"))
++
++
++def _act_finis_fichier():
++    return os.path.join(MANGA_SOURCES, "_activite_finis.json")
++
++
++def _act_finis_lire():
++    try:
++        with open(_act_finis_fichier(), encoding="utf-8") as f:
++            j = json.load(f)
++        return j if isinstance(j, list) else []
++    except Exception:
++        return []
++
++
++def _act_journaliser(out, maintenant):
++    with _ACT_FIN_VERROU:
++        vus = {_act_fin_cle(it): it for it in out if it.get("etape") != "attente"}
++        partis = [(k, v) for k, v in list(_ACT_VU.items()) if k not in vus]
++        for k, it in vus.items():
++            _ACT_VU[k] = (dict(it), maintenant)
++        if not partis:
++            return
++        j = _act_finis_lire()
++        for k, (it, t) in partis:
++            _ACT_VU.pop(k, None)
++            issue = "fini"
++            if it.get("type") == "dialogues":
++                pr = _dlg_lire(os.path.join(MANGA_SOURCES, it.get("d") or "", "dialogues", "progress.json")) or {}
++                issue = _ACT_FIN_ISSUE_DLG.get(pr.get("etape"), "fini")
++            elif it.get("type") in ("narration", "traduction", "lot", "dialogues_lot") and maintenant - _ACT_COUPE[0] < 120:
++                issue = "arrete"
++            e = {c: it.get(c) for c in ("type", "d", "titre", "chapitre", "tag", "langue", "etape") if it.get(c) not in (None, "")}
++            e.update(cle=k, t=round(t, 1), vu_fini=round(maintenant, 1), issue=issue)
++            j.insert(0, e)
++        j = [x for x in j if maintenant - (x.get("t") or 0) < 86400][:50]
++        try:
++            tmp = _act_finis_fichier() + ".tmp"
++            with open(tmp, "w", encoding="utf-8") as f:
++                json.dump(j, f, ensure_ascii=False)
++            os.replace(tmp, _act_finis_fichier())
++        except Exception:
++            pass
++
++
+ def manga_activite():
+     """Tout ce qui travaille en ce moment, tous chapitres confondus (Manga Studio v1.88.0)."""
+     out = []
+@@ -9414,7 +9470,11 @@
+             _ACT_VIT[cle] = (maintenant, fait); continue
+         if fait - f0 >= 2 and maintenant - t0 >= 20:
+             it["reste_s"] = round((total - fait) * (maintenant - t0) / (fait - f0))
+-    return {"items": out, "t": maintenant}
++    try:
++        _act_journaliser(out, maintenant)                   # v2.85.0 (R10)
++    except Exception:
++        pass
++    return {"items": out, "t": maintenant, "finis": _act_finis_lire()[:20]}
+ 
+ 
+ def manga_karaoke(d, tag):
+@@ -9943,6 +10003,7 @@
+ def manga_interrompre():
+     """Manga Studio v2.12.0 (4-undecies) : arret propre de ce qui depend du mode ☁/🖥 (lot, narrations, traductions)
+     + bilan exact. Toute la logique est dans scripts/interruption.py (recharge a chaud)."""
++    _ACT_COUPE[0] = time.time()                             # v2.85.0 (R10) : ce qui disparait maintenant est ARRETE, pas fini
+     t = os.path.getmtime(MANGA_INTERRUPTION)
+     if _INT_MOD["m"] is None or _INT_MOD["t"] != t:
+         import importlib.util

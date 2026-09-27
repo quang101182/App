@@ -3394,7 +3394,7 @@ RÉELLE + sabotage ROUGE, bump version, commit + push à chaque étape ; apparei
       dans un `⋯`. Rien de supprimé : tout ce que la ligne permettait reste dans le détail. Banc 5 largeurs (aucun débordement,
       ▶ ouvre le lecteur sur la bonne vidéo, `›` déplie/replie, Tout lire enchaîne) + série réelle (banc D10 à mettre à jour) +
       page v2.83.0 = ROUGE.
-- [ ] **R10 — « ✓ fini » commun à tous les appareils** (v2.85.0 + patch serveur). Constat (tracé 11h41, `actRafraichir`) :
+- [x] **R10 — « ✓ fini » commun à tous les appareils** (v2.85.0 + patch serveur). ✅ **27/09 12h40 = app v2.85.0** (`app_patch_2850_finis_communs.py`) + serveur `patch_activite_finis.py` (+ .diff ; appliqué au proxy, IDENTIQUE à la copie testée ; 2 instances relancées au repos, `finis` présent sur 8190 et 8192). Banc `test_activite_finis_ui.py` **11/11** (instance 8191, tâche Dialogues factice : téléphone la voit finir, PC ouvert APRÈS coup l'affiche, 1 seule entrée, arrêt = ⏹, journal qui survit au redémarrage) ; page v2.84.0 = ROUGE ; serveur non patché = ROUGE (« Rien en cours » sur le PC = le symptôme de Quang). Défaut trouvé par le banc et corrigé : 2 fins du même chapitre à < 5 min étaient fusionnées (dédoublonnage par identifiant serveur désormais). Sans serveur, un arrêt vu seulement en local reste affiché « fini » (préexistant) ; avec le serveur, il est corrigé en ⏹. Constat (tracé 11h41, `actRafraichir`) :
       « en cours » vient du serveur, mais « ✓ … fini » et « Terminé pendant cette session » sont calculés PAR APPAREIL (ce qui
       tournait au tour d'avant) → un traitement lancé sur le Fold et fini avant d'ouvrir le PC n'y apparaît jamais. Vrai pour
       TOUS les types, pas seulement 🎭. Faire : serveur = journal des fins (`activite_finis.json` par instance : type, d, titre,
@@ -3405,7 +3405,7 @@ RÉELLE + sabotage ROUGE, bump version, commit + push à chaque étape ; apparei
       relancées AU REPOS (`/manga/activite` vide ; secondaire : tuer seulement le PID d'`espace_prive.py` puis
       `Start-ScheduledTask MangaStudioInstance2`). Banc : 2 navigateurs (« PC » et « téléphone »), tâche finie pendant que le 2e
       est fermé → le 2e l'affiche en ouvrant ; sabotage (journal ignoré) = ROUGE.
-- [ ] **R10-bis — Libellé de la fin des Dialogues** : « 🎭 Préparation finie » / « 🔊 Voix finies » / « 🎬 Vidéo finie » selon
+- [x] **R10-bis — Libellé de la fin des Dialogues** (✅ v2.85.0, `actFinTxt`, vérifié par le banc R10) : « 🎭 Préparation finie » / « 🔊 Voix finies » / « 🎬 Vidéo finie » selon
       l'étape (au lieu de « Dialogues fini »). Avec R10 (même code).
 - [ ] **R11 — Clôture** : Samsung au doigt (lueur, panneau compact, ✓ commun PC ↔ téléphone), ROADMAP (versions, constats),
       HANDOFF-reprise, mémoire du projet, commit + push.
