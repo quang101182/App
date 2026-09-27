@@ -3339,6 +3339,15 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       **12/12** (bandeau ✏, fusion confirmée, alias, répliques suivies, plan qui suit la voix, « pas les mêmes » noté ; ligne 🎭
       « ⚠ 2 doublons probables ») ; page v2.82.1 et serveur non patché = ROUGES ; `test_dialogues_preparer.py` **29/29**
       (DeepSeek simulé : plus rien ne sort du banc ; scénario G) + sabotage « refus ignoré » = ROUGE ; série réelle 92/92.
+- [x] **R6 — L'écran ✏ « Corriger et régler » au gabarit de l'app** (Quang 03h35, capture : « ce format qui déborde en haut et en bas,
+      sans liberté, ne respectant pas la largeur de l'application »). Constat : `#dlgPrep` = plein écran, barres haut/bas d'un bord
+      à l'autre (`position:fixed`, `left:0;right:0`), contenu à 1100 px, rien pour fermer en touchant à côté. Référence = `.modal` +
+      `.modal-in` (Suivi & coûts) : fenêtre centrée ≤ 760 px, ≤ 86 % de la hauteur, « ← Retour » DANS la fenêtre, clic à côté = fermer.
+      Faire : même gabarit, en-tête et pied DANS la fenêtre, seul le contenu défile ; banc 5 largeurs (aucun débordement, barres
+      dans la fenêtre) + sabotage.
+      ✅ **27/09 03h45 = app v2.82.3** (`app_patch_2823_prep_modal.py`) : `.modal` + `.modal-in` (≤ 760 px, ≤ 90 % de haut), en-tête
+      et pied dans la fenêtre, seul le contenu défile, toucher à côté = fermer. Banc `test_dialogues_prep_gabarit_ui.py` **42/42** (app
+      réelle, 5 largeurs : largeur, centrage, en-tête/pied dans la fenêtre, défilement, aucun débordement) ; page v2.82.2 = ROUGE (0/5).
 - [x] **R5 — D9 clôture.** ✅ 27/09 03h45 : constats barrés (maquette v2, relances de la secondaire, caméra, déclencheur D10), HANDOFF, mémoire du projet, commit.
 - [x] **D12 — Cohérence de la distribution (livré : R4) (fiabilité globale, Quang 02h28 : « que la solution devienne de plus en plus fiable
       dans la globalité »)** : en fin de préparation, un contrôle des DOUBLONS probables (même genre, rôle, descriptions proches,
