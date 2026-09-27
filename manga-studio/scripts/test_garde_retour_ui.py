@@ -24,6 +24,7 @@ def ouvrir(b, port, nom):
     pg.goto("about:blank"); pg.goto("http://127.0.0.1:%d/manga/#k=%s" % (port, KEY))
     pg.wait_for_function("n => typeof ESPACE !== 'undefined' && ESPACE.nom === n", arg=nom, timeout=30000); pg.wait_for_timeout(1200)
     pg.evaluate("() => { window.__toasts = []; const t = window.toast; window.toast = m => { window.__toasts.push(m); return t(m); }; }")
+    pg.mouse.click(180, 300); pg.wait_for_timeout(300)          # v2.97.0 : la garde se pose au premier VRAI toucher
     return ctx, pg
 
 
@@ -38,11 +39,11 @@ with sync_playwright() as p:
     check("2e retour dans les 2,5 s = on QUITTE l'app", not dans_app(pg), pg.url)
     ctx.close()
     ctx, pg = ouvrir(b, 8192, "prive")
-    pg.go_back(); pg.wait_for_timeout(3300)
-    check("sans 2e retour : la garde se réarme (après 2,5 s)", dans_app(pg) and pg.evaluate("() => !!(history.state && history.state.garde)"))
+    pg.go_back(); pg.wait_for_timeout(3300); pg.mouse.click(180, 300); pg.wait_for_timeout(300)
+    check("sans 2e retour : la garde se réarme au toucher suivant (après 2,5 s)", dans_app(pg) and pg.evaluate("() => !!(history.state && history.state.garde)"))
     pg.go_back(); pg.wait_for_timeout(600)
     check("… et un retour plus tard redonne l'avertissement (on reste)", dans_app(pg) and len(pg.evaluate("() => window.__toasts")) == 2)
-    pg.wait_for_timeout(3000)
+    pg.wait_for_timeout(3000); pg.mouse.click(180, 300); pg.wait_for_timeout(300)   # en vrai, c'est un TOUCHER qui ouvre « choix »
     pg.evaluate("() => { choixOuvrir({ titre: 'banc', items: [{ t: 'Un manga' }, { t: 'Un autre' }] }); }"); pg.wait_for_timeout(800)
     ouvert = pg.evaluate("() => !$('choix').hidden")
     pg.go_back(); pg.wait_for_timeout(800)
