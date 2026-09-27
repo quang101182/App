@@ -10,14 +10,15 @@ L'analyse des pages et le recit restent en ligne dans les deux modes (analyse lo
 """
 import json, os, sys
 
-VERSION = "1.5.0"   # 1.5.0 (R18 phase 2) : defauts des curseurs de lecture ;   # 1.4.0 (R18, 27/09) : valeurs PAR DEFAUT (par instance) : « defauts »
+VERSION = "1.6.0"   # 1.6.0 (R24) : voix PREFEREES (voix_favorites) ;   # 1.5.0 (R18 phase 2) : defauts des curseurs de lecture ;   # 1.4.0 (R18, 27/09) : valeurs PAR DEFAUT (par instance) : « defauts »
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 FICHIER = os.environ.get("MANGA_REGLAGES") or os.path.join(SRC, "_reglages.json")
 DEFAUT = {"mode": "cloud", "relais_moderation": False,   # v1.2.0 : relais auto vers l'autre moteur en ligne
           "flou_discretion": True,                       # v1.3.0 : flou de la secondaire hors focus (Quang 25/09 : optionnel)
-          "defauts": {}}                                 # v1.4.0 (R18) : {cle: nombre} -- voir DEFAUTS_BORNES
+          "defauts": {},                                 # v1.4.0 (R18) : {cle: nombre} -- voir DEFAUTS_BORNES
+          "voix_favorites": []}                          # v1.6.0 (R24) : ids des voix preferees (en tete, choisies d'abord)
 # v1.4.0 (R18) : les valeurs par defaut reglables (« ⭐ » dans l'app), bornees. voix_<h|f|n>_<vitesse|ecoute> : personnages
 # (homme, femme, narrateur) ; les curseurs de lecture s'ajoutent ici (phase 2). Une cle inconnue est refusee.
 DEFAUTS_BORNES = {"voix_h_vitesse": (0.7, 1.2), "voix_f_vitesse": (0.7, 1.2), "voix_n_vitesse": (0.7, 1.2),
@@ -25,6 +26,10 @@ DEFAUTS_BORNES = {"voix_h_vitesse": (0.7, 1.2), "voix_f_vitesse": (0.7, 1.2), "v
                   # v1.5.0 (R18 phase 2) : les curseurs de lecture de l'app
                   "vit_cloud": (0.5, 2), "vit_local": (0.5, 2), "vol_g": (0, 100), "mus_vol": (0, 100),
                   "dll_vit": (0.5, 2), "vid_vit": (0.5, 2)}
+
+
+import re
+_ID_VOIX = re.compile(r"^[A-Za-z0-9]{8,40}$")
 
 
 def _brut():
@@ -40,6 +45,8 @@ def _brut():
     d = r.get("defauts") if isinstance(r.get("defauts"), dict) else {}      # v1.4.0 : on ne garde que le connu et le borne
     r["defauts"] = {k: v for k, v in d.items() if k in DEFAUTS_BORNES and isinstance(v, (int, float))
                     and DEFAUTS_BORNES[k][0] <= v <= DEFAUTS_BORNES[k][1]}
+    f = r.get("voix_favorites") if isinstance(r.get("voix_favorites"), list) else []          # v1.6.0
+    r["voix_favorites"] = [x for x in f if isinstance(x, str) and _ID_VOIX.match(x)][:40]
     return r
 
 
@@ -69,6 +76,18 @@ def ecrire(**kw):
                 r["defauts"].pop(k, None); continue
             lo, hi = DEFAUTS_BORNES[k]
             r["defauts"][k] = round(max(lo, min(hi, float(v))), 2)
+    if "voix_favorites" in kw:                           # v1.6.0 (R24) : {ajouter: id} / {retirer: id} / [ids]
+        v = kw.pop("voix_favorites")
+        if isinstance(v, dict):
+            i = str(v.get("ajouter") or v.get("retirer") or "")
+            if not _ID_VOIX.match(i):
+                raise ValueError("voix inconnue")
+            f = [x for x in r["voix_favorites"] if x != i]
+            r["voix_favorites"] = ([i] + f)[:40] if v.get("ajouter") else f
+        elif isinstance(v, list) and all(isinstance(x, str) and _ID_VOIX.match(x) for x in v):
+            r["voix_favorites"] = list(dict.fromkeys(v))[:40]
+        else:
+            raise ValueError("voix_favorites : {ajouter|retirer: id} ou liste d'ids")
     r.update({k: v for k, v in kw.items() if k in DEFAUT})
     if r["mode"] not in ("cloud", "pc"):
         raise ValueError("mode inconnu")

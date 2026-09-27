@@ -44,6 +44,15 @@ with sync_playwright() as p:
     check("… et la principale a OUBLIÉ la secondaire", pg.evaluate("() => localStorage.getItem('manga_reste_secondaire')") is None)
     pg3 = ctx.new_page(); pg3.goto(P); pg3.wait_for_timeout(4000)
     check("icône de la principale rouverte ensuite : on RESTE dans la principale", pg3.url.startswith(P), pg3.url)
+    # v2.95.0 (echec du Fold 14h22) : retour au PREMIER PLAN moins de 20 s apres un renvoi -> renvoi QUAND MEME
+    pg3.evaluate("u => { localStorage.setItem('manga_reste_secondaire', u); localStorage.setItem('manga_reste_secondaire:t', String(Date.now())); }", S)
+    pg3.evaluate("() => document.dispatchEvent(new Event('visibilitychange'))")
+    try:
+        pg3.wait_for_url(S + "**", timeout=10000)
+    except Exception:
+        pass
+    check("retour au premier plan < 20 s après un renvoi : renvoyé QUAND MÊME (échec du Fold)", pg3.url.startswith(S), pg3.url)
+    pg3 = ctx.new_page(); pg3.goto(P + "#retour=1"); pg3.wait_for_timeout(3000)
     # filet : secondaire injoignable -> pas de boucle
     pg3.evaluate("() => { localStorage.setItem('manga_reste_secondaire', 'http://127.0.0.1:8199/manga/'); localStorage.removeItem('manga_reste_secondaire:t'); }")
     pg4 = ctx.new_page()

@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.16.0"  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.17.0"  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -165,6 +165,24 @@ def voix_francaises():
         out.append({"id": x["voice_id"], "nom": n.split(" - ")[0].strip(), "genre": x["gender"], "age": x.get("age") or "?",
                     "desc": ((n.split(" - ", 1)[1] if " - " in n else "") or x.get("descriptive") or "")[:60], "fr": True})
     return out
+
+
+def avec_preferees(cat):
+    """1.17.0 (R24) : les voix PREFEREES de l'instance (reglages.voix_favorites) en tete, marquees pour le modele ; une preferee
+    absente du catalogue (voix du compte) y est ajoutee depuis catalogue_el()."""
+    try:
+        import reglages
+        fav = reglages._brut().get("voix_favorites") or []
+    except Exception:
+        fav = []
+    if not fav:
+        return cat
+    tous = {v["id"]: v for v in cat}
+    if any(i not in tous for i in fav):
+        for v in catalogue_el():
+            tous.setdefault(v["id"], v)
+    tete = [dict(tous[i], desc="⭐ preferee de Quang -- " + (tous[i].get("desc") or ""), prefere=True) for i in fav if i in tous]
+    return tete + [v for v in cat if v["id"] not in fav]
 
 
 def catalogue_el():
@@ -483,6 +501,7 @@ def cmd_preparer(a):
     tags = sorted(os.listdir(narr_d)) if os.path.isdir(narr_d) else []
     narr = lire_json(os.path.join(narr_d, tags[0], "narration.json")) if tags else None
     cat = voix_francaises() or catalogue_el()                  # 1.15.0 (R19) : 100 % francaises, sinon le compte
+    cat = avec_preferees(cat)                                   # 1.17.0 (R24) : les PREFEREES d'abord
     relais = reglages.relais_moderation()
     log("dialogues %s preparer %s : %d pages, %d bulles, %d personnages connus, relais %s" % (
         VERSION, a.chap, len(pages), sum(len(p["_bulles"]) for p in pages), len(distrib["persos"]), "oui" if relais else "non"))
