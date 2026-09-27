@@ -3318,10 +3318,18 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       plusieurs chapitres), badge 🎭 dans la liste, ← referme le panneau. Serveur : `patch_dialogues_6` (déjà en place sur les 2
       instances). Banc `test_dialogues_serie_ui.py` **92/92** sur l'app RÉELLE aux 5 largeurs (lancements payants interceptés) ;
       page v2.81.8 = ROUGE (0/5).
-- [ ] **R3-bis — Une vidéo PAR PORTÉE** (Quang 03h08 : « plusieurs vidéos sur un même chapitre, pages 5 à 10 et 35 à 42 ? »).
+- [x] **R3-bis — Une vidéo PAR PORTÉE** (Quang 03h08 : « plusieurs vidéos sur un même chapitre, pages 5 à 10 et 35 à 42 ? »).
       Constat : UNE vidéo par chapitre (`dialogues/video/dialogues.mp4`) couvrant toutes les pages préparées, refaite = écrasée.
       Décidé par Claude : 🎬 fabrique la vidéo de la portée des champs (fichier `dialogues_p5-10.mp4`), chaque portée garde la
       sienne ; ligne 🎭 et panneau de la série listent les vidéos (▶ ⬇, à jour / à refaire). **Déclencheur : juste après D10.**
+      ✅ **27/09 03h20 = app v2.82.1** (`app_patch_2821_video_portee.py`) + `dialogues.py` 1.10.0 (`video --pages`, `empreinte_video()`
+      = UNE définition pour plan et vidéo, `doc.videos {portée}`, plan rend `videos`) + `patch_dialogues_7.py` (+ .diff, 1 ligne :
+      la portée passe aussi à la vidéo ; 2 instances relancées au repos). Essai réel sur copie : p.13-14 (19 s) et p.15 (17 s)
+      distinctes, l'ancienne « chapitre entier » gardée ; texte modifié en p.15 → SEULE la vidéo p.15 à refaire. Banc
+      `test_dialogues_video_portee_ui.py` **10/10** (vraies vidéos fabriquées par l'app ; ▶ suit la portée des champs ; refus
+      annoncé AVANT de lancer si une voix manque ; panneau « 🎬 3 vidéos ») ; page v2.82.0 = ROUGE. Voisins : série réelle 92/92,
+      format 38/38, sans voix 26/26, préparer 26/26, voix 23/23, lot 8/8. (Le banc affichait l'adresse avec le secret de l'app
+      dans le terminal local : corrigé, il n'affiche plus que le nom du fichier.)
 - [ ] **R4 — D12** (doublons de personnages, ci-dessous).
 - [ ] **R5 — D9 clôture.**
 - [ ] **D12 — Cohérence de la distribution (fiabilité globale, Quang 02h28 : « que la solution devienne de plus en plus fiable
