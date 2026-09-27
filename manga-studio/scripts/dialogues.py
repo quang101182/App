@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.19.0"  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.20.0"  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -608,10 +608,12 @@ def cmd_preparer(a):
     fch = os.path.join(dd, "dialogues.json")
     ancien = lire_json(fch) or {}
     par_cle = {x["cle"]: x for x in ancien.get("repliques") or []}
+    generes = set()                                                     # 1.20.0 : ce que CETTE preparation produit
     for p in pages:
         img = os.path.join(chap_dir, *p["img_rel"].split("/"))
         for b in p["_bulles"]:
             cle = "%d-%d" % (p["page"], b["id"])
+            generes.add(cle)
             x = rep.get((p["page"], b["id"]))
             vieux = par_cle.get(cle) or {}
             corr = vieux.get("corrige") or {}
@@ -627,6 +629,12 @@ def cmd_preparer(a):
                 neuf["lire"] = neuf["lire"] and bool(distrib["narrateur"].get("lire"))
             neuf.update({k: v for k, v in corr.items() if k in ("texte", "qui", "ton", "lire")})   # les corrections gagnent
             par_cle[cle] = neuf
+    traitees = voulues & {p["page"] for p in tr["pages"]}               # 1.20.0 : pages de la plage connues de la source
+    retirees = [c for c, x in par_cle.items() if x.get("page") in traitees and c not in generes]
+    for c in retirees:
+        par_cle.pop(c)
+    if retirees:
+        log("  %d replique(s) retiree(s) : bulle exclue ou plus detectee (%s)" % (len(retirees), ", ".join(sorted(retirees)[:12])))
     ambiances = [r.get("ambiance") for r in reponses if r.get("ambiance")]
     try:
         total = len(nc.pages_du_chapitre(chap_dir, "")[1])
