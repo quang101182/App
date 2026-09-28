@@ -157,6 +157,19 @@ qui défile → 2 pages sur 26 ; body/html ignorés et un bloc n'est retenu que 
 
 ## Lecteurs reconnus (v0.3.0, 21/09/2026)
 
+> **v0.9.0 (28/09)** : page par page, la fin était conclue après 5 essais « sans nouvelle image ». Or une galerie peut
+> contenir des pages **en double** (vécu : 226 pages dont 214-224 = copies exactes de 198-208) : la déduplication les écartait
+> en silence, 5 doublons d'affilée = « fin », les 2 vraies pages suivantes perdues, capture **déclarée réussie**. Désormais
+> une image d'adresse nouvelle dont le contenu diffère de la précédente = le lecteur **avance** (doublon journalisé
+> « doublon de page_X » ; une page blanche écartée compte aussi) ; une image écartée n'est plus retéléchargée à chaque tour.
+> Filet : le compteur affiché par le lecteur (« 213 / 226 », « page N sur M », « N of M ») est lu avant de conclure — il
+> reste des pages → la page est **rechargée** (4 essais au même endroit) ; toujours bloqué, ou pages + doublons + écartées
+> < total annoncé → **ECHEC** écrit. Lecteur sans compteur lisible : seul le premier point s'applique.
+> Une image affichée en grand mais hors format de page (vécu : bande promotionnelle du volume scannée, 1280 × 246) n'est
+> toujours pas capturée, mais elle est **comptée** et journalisée (« hors format de page ») : pas de fausse alerte.
+> Banc : `scripts/test_lecteur_bloque_fin.py` (faux lecteur local, VRAIE capture ; cas `doublons`, `cale`, `bloque`,
+> `bandeaux` ; 0.8.9 ROUGE sur doublons / cale / bloque, 0.9.0 sans le comptage ROUGE sur bandeaux).
+
 | Affichage | Détection | Avance | Extraction |
 |---|---|---|---|
 | **Page par page** (MangaDex) | document ≈ hauteur d'écran, aucun bloc défilant | flèche → ; si rien : **clic à droite, puis à gauche** (sens japonais, MANGA Plus) — le côté qui marche est gardé | `fetch` du blob / `requests` |

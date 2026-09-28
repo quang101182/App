@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.8.9"  # 0.8.9 (28/09) : pages « /s/<cle>/<galerie>-<page> » = une seule galerie ; 0.8.8 (28/09) : 1re page du chapitre suivant retiree de la fin du precedent ; 0.8.7 (28/09) : enchainement « meme adresse au n° pres » ; 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
+VERSION = "0.9.0"  # 0.9.0 (28/09) : page par page, une page EN DOUBLE dans la galerie = le lecteur avance (plus « fin » apres 5 doublons) ; compteur « N / M » lu avant de conclure (cale = rechargement, sinon ECHEC ecrit) ; 0.8.9 (28/09) : pages « /s/<cle>/<galerie>-<page> » = une seule galerie ; 0.8.8 (28/09) : 1re page du chapitre suivant retiree de la fin du precedent ; 0.8.7 (28/09) : enchainement « meme adresse au n° pres » ; 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -1258,6 +1258,25 @@ def capture(args) -> int:
             CDP_RES = {}                                    # v0.7.3 : session CDP ouverte a la 1re image refusee
             MODE_BANDE = [False]                            # v0.7.3 : fixe une fois le mode de lecture connu
             ECARTEES = set()                                # v0.7.4 : images vues mais ecartees volontairement
+            # v0.9.0 (28/09, S15, cause PROUVEE) : galerie de 226 pages dont 11 sont des copies EXACTES d'anciennes pages
+            # (214-224 = 198-208). La deduplication les ecartait EN SILENCE, la boucle page par page les comptait « rien de
+            # nouveau », et apres 5 doublons d'affilee elle concluait « fin » : les 2 vraies pages suivantes (225, 226) etaient
+            # perdues et la capture declaree reussie. Une image d'adresse NOUVELLE dont le contenu differe de l'image
+            # precedente = le lecteur a AVANCE, meme si ce contenu est deja capture. (Un blob re-servi pour la MEME page a la
+            # meme empreinte que la precedente : il ne compte pas, la fin reste detectee.)
+            AVANCE = {"n": 0, "derniere": None, "doublons": 0, "petites": 0}
+            # v0.9.0 : image affichee EN GRAND par le lecteur (>= 40 % de la largeur) mais hors format de page (vecu : 2 bandes
+            # promotionnelles 1280x246 en fin de volume) -> non capturee comme avant, mais COMPTEE et journalisee, pour que le
+            # controle final sache expliquer l'ecart avec le total annonce au lieu de crier a la perte.
+            HORS_FORMAT = {}
+            HORS_FORMAT_JS = """() => [...document.images].filter(i => i.complete && i.naturalWidth > 0
+                    && !((i.naturalWidth > 250 && i.naturalHeight > 500 && (i.naturalWidth / i.naturalHeight < 0.93
+                          || i.naturalWidth / i.naturalHeight > 1.15)))
+                    && i.getBoundingClientRect().width >= innerWidth * 0.4
+                    && i.getBoundingClientRect().bottom > 80 && i.getBoundingClientRect().top < innerHeight - 80
+                    && !i.closest('#comments, .comments, .comments-list-wrapper, .comment, [id^="comment"], .disqus, #disqus_thread'))
+                .map(i => [i.src, i.naturalWidth, i.naturalHeight])"""
+            EMPREINTE_FICHIER = {}
             def extraire_data(src: str) -> bytes:
                 """Pleine résolution si possible (fetch page / requests), sinon SCREENSHOT de
                 l'élément. Certains sites bloquent fetch(blob:) par CSP alors que l'image
@@ -1352,8 +1371,18 @@ def capture(args) -> int:
                         && !i.closest('#comments, .comments, .comments-list-wrapper, .comment, [id^="comment"], .disqus, #disqus_thread'))
                     .map(i => ({src: i.src, top: Math.round(i.getBoundingClientRect().top + window.scrollY),
                                 w: i.naturalWidth, h: i.naturalHeight})); }""", larg_col)
+                if not MODE_BANDE[0]:
+                    try:
+                        for _src, _w, _h in page.evaluate(HORS_FORMAT_JS):
+                            if _src not in HORS_FORMAT and not _src.startswith("data:"):
+                                HORS_FORMAT[_src] = (_w, _h)
+                                AVANCE["n"] += 1                       # le lecteur a avance (une page, meme hors format)
+                                AVANCE["derniere"] = _src
+                                log_evt("écartée", "hors format de page (%dx%d, bandeau ?)" % (_w, _h), src=_src[:60])
+                    except Exception:
+                        pass
                 for im in nouvelles:
-                    if im["src"] in vues:
+                    if im["src"] in vues or im["src"] in ECARTEES:     # v0.9.0 : une ecartee n'est plus retelechargee
                         continue
                     try:
                         data = extraire_data(im["src"])
@@ -1366,11 +1395,17 @@ def capture(args) -> int:
                         _lc = [v["w"] for v in vues.values()]
                         _col = max(set(_lc), key=_lc.count) if _lc else 0
                         espace = MODE_BANDE[0] and _col >= 500 and im["w"] == _col and len(data) < 10000
+                        if hsh != AVANCE["derniere"]:
+                            AVANCE["n"] += 1
+                            AVANCE["derniere"] = hsh
                         if hsh in vus_hashes and not espace:
                             ECARTEES.add(im["src"])
-                            continue  # même contenu déjà capturé (blob régénéré par le pager)
+                            AVANCE["doublons"] += 1
+                            log_evt("écartée", "doublon de %s" % EMPREINTE_FICHIER.get(hsh, "?"), src=im["src"][:60])
+                            continue  # même contenu déjà capturé (blob régénéré par le pager, page répétée dans la galerie)
                         if len(data) < 10000 and not espace:
                             ECARTEES.add(im["src"])
+                            AVANCE["petites"] += 1
                             # aucune page de manga ne fait < 10 Ko : logos, boutons,
                             # cartes de fin de chapitre
                             notes.append(f"écartée ({len(data)} octets) : {im['src'][:50]}")
@@ -1378,6 +1413,7 @@ def capture(args) -> int:
                             continue
                         vus_hashes.add(hsh)
                         nom = save_page(dest, len(vues) + 1, data)
+                        EMPREINTE_FICHIER[hsh] = nom
                         vues[im["src"]] = {"file": nom, "bytes": len(data),
                                            "top": im["top"], "w": im["w"], "h": im["h"]}
                         log_evt("page", f"{len(vues)} collectée", fichier=nom,
@@ -1566,6 +1602,25 @@ def capture(args) -> int:
                 # elles deviennent des garde-fous larges, et les atteindre = ECHEC ecrit.
                 sterile, debut_pager, mode_clic, cote, cotes_essayes = 0, time.time(), False, 0.75, set()
                 fini, tours = False, 0
+                # v0.9.0 (28/09, S15) : galerie de 226 pages -> 213 capturees, declaree REUSSIE. Rejouee a la main, la
+                # meme zone avance normalement : l'image d'UNE page n'etait pas venue (noeud d'images lent) et le lecteur
+                # ignorait les fleches en l'attendant. 5 essais steriles suffisaient a conclure « fin » sans regarder le
+                # compteur « 213 / 226 » affiche. Desormais : compteur lu -> s'il reste des pages, on RECHARGE la page
+                # (jusqu'a 4 fois au meme endroit) puis on reprend aux fleches ; toujours bloque = ECHEC ecrit.
+                COMPTEUR_JS = r"""() => { const n = {};
+                    for (const e of document.querySelectorAll('body *')) {
+                        if (e.children.length > 3 || !e.getClientRects().length) continue;
+                        const m = (e.innerText || '').trim().match(/^(?:page\s*)?(\d{1,4})\s*(?:\/|sur|of)\s*(\d{1,4})$/i);
+                        if (m && +m[1] >= 1 && +m[1] <= +m[2] && +m[2] >= 2) { const k = m[1] + '/' + m[2]; n[k] = (n[k] || 0) + 1; } }
+                    const e = Object.entries(n).sort((a, b) => b[1] - a[1]);
+                    return e.length ? e[0][0].split('/').map(Number) : null; }"""
+
+                def compteur():
+                    try:
+                        return page.evaluate(COMPTEUR_JS)
+                    except Exception:
+                        return None
+                relances, relance_pos = 0, None
                 while True:
                     tours += 1
                     if chapitre_quitte():
@@ -1574,7 +1629,7 @@ def capture(args) -> int:
                         fini = True
                         break
                     collecter()
-                    n_avant = len(vues)
+                    n_avant = AVANCE["n"]                     # v0.9.0 : pages nouvelles ET doublons (le lecteur avance)
                     if not mode_clic and sterile >= 2:
                         # Les flèches ne font rien (MANGA Plus n'écoute pas le clavier,
                         # mesuré 21/09) → navigation par CLIC.
@@ -1600,9 +1655,40 @@ def capture(args) -> int:
                         fini = True
                         break
                     collecter()
-                    if len(vues) == n_avant:
+                    if AVANCE["n"] == n_avant:
                         sterile += 1
                         if sterile >= 5 and len(vues) > 0:
+                            cpt = compteur()
+                            if cpt and cpt[0] < cpt[1]:
+                                if relance_pos != cpt[0]:
+                                    relance_pos, relances = cpt[0], 0
+                                if relances < 4:
+                                    # le lecteur affiche « N / M » avec N < M : il CALE, ce n'est pas la fin
+                                    relances += 1
+                                    log_evt("navigation", "lecteur bloqué avant la fin : rechargement",
+                                            page=cpt[0], total=cpt[1], essai=relances)
+                                    print("Lecteur bloqué page %d / %d : rechargement (essai %d)" % (cpt[0], cpt[1], relances))
+                                    try:
+                                        page.reload(wait_until="domcontentloaded", timeout=30000)
+                                    except Exception as e:
+                                        log_evt("navigation", f"rechargement : {type(e).__name__}")
+                                    page.wait_for_timeout(2500 + 1500 * relances)
+                                    sterile, mode_clic, cote, cotes_essayes = 0, False, 0.75, set()
+                                    continue
+                                notes.append("ECHEC : lecteur bloqué page %d sur %d annoncées (%d capturées) -- "
+                                             "relancer avec --force" % (cpt[0], cpt[1], len(vues)))
+                                log_evt("fin", "LECTEUR BLOQUÉ avant la fin", page=cpt[0], total=cpt[1], pages=len(vues))
+                            elif cpt:
+                                # derniere page atteinte : pages + doublons + ecartees doivent couvrir le total annonce
+                                vues_total = len(vues) + AVANCE["doublons"] + AVANCE["petites"] + len(HORS_FORMAT)
+                                log_evt("contrôle", "fin du lecteur", pages=len(vues), doublons=AVANCE["doublons"],
+                                        petites=AVANCE["petites"], hors_format=len(HORS_FORMAT), total=cpt[1])
+                                if vues_total < cpt[1]:
+                                    notes.append("ECHEC : %d page(s) vue(s) sur %d annoncées (%d capturées, %d en double, "
+                                                 "%d écartées, %d hors format) -- relancer avec --force"
+                                                 % (vues_total, cpt[1], len(vues), AVANCE["doublons"], AVANCE["petites"],
+                                                    len(HORS_FORMAT)))
+                                    log_evt("fin", "MOINS de pages vues que le total annoncé", vues=vues_total, total=cpt[1])
                             fini = True
                             break  # plus rien de nouveau ET on a des pages : fin de chapitre
                         if sterile >= 20 and len(vues) == 0:
