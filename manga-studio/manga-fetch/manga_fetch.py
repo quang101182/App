@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.8.5"  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
+VERSION = "0.8.6"  # 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -387,6 +387,26 @@ def vol_suivant(slugs, courant_slug: str, jusqua=None, entiers: bool = False):
             return None, None, "le chapitre suivant (%s) dépasse la borne demandée (%s)" % (num, _format_num(jusqua))
         return num, s, None
     return None, None, "aucun volume ni chapitre après « %s » sur ce site" % courant_slug
+
+
+RE_PAGE_FINALE = re.compile(r"/(?:p|page|pg)[-/]\d+/?$", re.I)   # 0.8.6 : « .../p/3/ », « .../page/3 », « .../page-3/ »
+
+
+def chapitre_path(u: str) -> str:
+    """Chemin reduit a l'identifiant de CHAPITRE (sans le numero de PAGE final). 0.8.6 : sorti de capture() pour etre teste.
+    1. « /p/N/ », « /page/N/ », « /page-N/ » en fin d'adresse = une PAGE (lecteurs qui changent l'adresse au defilement).
+    2. MangaDex : /chapter/<uuid 36>/<n> -- ne retirer le segment numerique final QUE s'il suit un segment long non
+       numerique (UUID), sinon /viewer/1000233 (MANGA Plus) perdrait son identifiant (bug 18:13 du 21/09)."""
+    u = (u or "").split("?")[0].split("#")[0]
+    m = RE_PAGE_FINALE.search(u)
+    if m:
+        return u[:m.start()]
+    base, _, dernier = u.rpartition("/")
+    if dernier.isdigit():
+        av = base.rpartition("/")[2]
+        if len(av) >= 20 and not av.isdigit():
+            return base
+    return u
 
 
 def enchainement_possible(url: str):
@@ -1372,19 +1392,7 @@ def capture(args) -> int:
             url_depart = page.url.split("?")[0].split("#")[0]
             url_source = _url_chapitre(page.url)      # v0.5.2 : webtoons.com garde title_no / episode_no
 
-            def _chapitre_path(u: str) -> str:
-                """Path réduit à l'identifiant de CHAPITRE (sans le numéro de PAGE final).
-                MangaDex : /chapter/<uuid 36>/<n>. ⚠ ne retirer le segment numérique final
-                QUE s'il est précédé d'un segment long non numérique (UUID) — sinon
-                /viewer/1000233 (MANGA Plus) perdrait son identifiant de chapitre.
-                (bug 18:13 : départ page 4 → passage en page 5 lu comme « chapitre
-                suivant » → arrêt après 4 pages au lieu de finir le chapitre.)"""
-                base, _, dernier = u.rpartition("/")
-                if dernier.isdigit():
-                    av = base.rpartition("/")[2]
-                    if len(av) >= 20 and not av.isdigit():
-                        return base
-                return u
+            _chapitre_path = chapitre_path                # 0.8.6 : regle au niveau du module (MangaDex + /p/N/)
 
             def chapitre_quitte() -> bool:
                 return _chapitre_path(page.url.split("?")[0].split("#")[0]) != _chapitre_path(url_depart)
