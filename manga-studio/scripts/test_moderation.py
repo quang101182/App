@@ -107,5 +107,26 @@ import depenses as dep
 dep.noter("narration", "zz/ch_1", "t", "gemini", 0.2 - 0.12, reuse="autre")
 check("ligne ecrite dans le fichier jetable", dep.REGISTRE.startswith(TMP) and abs(dep.lire()[-1]["paye"] - 0.08) < 1e-9)
 
+print("7. (28/09, S16) refus de Gemini EN TOUTES LETTRES pendant la preparation des Dialogues")
+VECU = ("I cannot fulfill this request. I am unable to process, analyze, or generate content for sexually explicit "
+        "or pornographic material.")
+check("phrase vecue = refus", bool(mod.refus_texte(VECU)))
+check("« I'm unable to process » = refus", bool(mod.refus_texte("I'm unable to process this image.")))
+check("phrase ordinaire (« I cannot believe it ») = PAS un refus", mod.refus_texte("I cannot believe it, he said.") is None)
+_post = nc.post
+try:
+    nc.post = lambda path, body, timeout=240: {"candidates": [{"content": {"parts": [{"text": VECU}]}, "finishReason": "STOP"}],
+                                               "usageMetadata": {"promptTokenCount": 1000, "candidatesTokenCount": 30}}
+    try:
+        nc.appel_vision("gemini", "sys", [{"type": "text", "text": "x"}], 100)
+        check("Gemini (reponse 200) qui refuse en toutes lettres -> Refus (relais possible)", False, "aucune exception")
+    except mod.Refus as e:
+        check("Gemini (reponse 200) qui refuse en toutes lettres -> Refus (relais possible)", e.moteur == "gemini", e.motif[:60])
+        check("le refus garde les jetons factures", getattr(e, "usage", {}).get("prompt_tokens") == 1000)
+    nc.post = lambda path, body, timeout=240: {"candidates": [{"content": {"parts": [{"text": '{"repliques": []}'}]}}], "usageMetadata": {}}
+    check("reponse JSON normale : pas de Refus", nc.appel_vision("gemini", "sys", [{"type": "text", "text": "x"}], 100)[0] == '{"repliques": []}')
+finally:
+    nc.post = _post
+
 print("\n%d/%d" % (len(OK), len(OK) + len(KO)))
 sys.exit(1 if KO else 0)

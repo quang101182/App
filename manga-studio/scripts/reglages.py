@@ -10,7 +10,7 @@ L'analyse des pages et le recit restent en ligne dans les deux modes (analyse lo
 """
 import json, os, sys
 
-VERSION = "1.6.0"   # 1.6.0 (R24) : voix PREFEREES (voix_favorites) ;   # 1.5.0 (R18 phase 2) : defauts des curseurs de lecture ;   # 1.4.0 (R18, 27/09) : valeurs PAR DEFAUT (par instance) : « defauts »
+VERSION = "1.7.0"   # 1.7.0 (S16) : « petits cris » (gemissements, bruits de bouche) ignores ou lus ;   # 1.6.0 (R24) : voix PREFEREES (voix_favorites) ;   # 1.5.0 (R18 phase 2) : defauts des curseurs de lecture ;   # 1.4.0 (R18, 27/09) : valeurs PAR DEFAUT (par instance) : « defauts »
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
@@ -18,7 +18,8 @@ FICHIER = os.environ.get("MANGA_REGLAGES") or os.path.join(SRC, "_reglages.json"
 DEFAUT = {"mode": "cloud", "relais_moderation": False,   # v1.2.0 : relais auto vers l'autre moteur en ligne
           "flou_discretion": True,                       # v1.3.0 : flou de la secondaire hors focus (Quang 25/09 : optionnel)
           "defauts": {},                                 # v1.4.0 (R18) : {cle: nombre} -- voir DEFAUTS_BORNES
-          "voix_favorites": []}                          # v1.6.0 (R24) : ids des voix preferees (en tete, choisies d'abord)
+          "voix_favorites": [],                          # v1.6.0 (R24) : ids des voix preferees (en tete, choisies d'abord)
+          "petits_cris": False}                          # v1.7.0 (S16, Quang 28/09) : gemissements / cris sans mots LUS ? (defaut : non)
 # v1.4.0 (R18) : les valeurs par defaut reglables (« ⭐ » dans l'app), bornees. voix_<h|f|n>_<vitesse|ecoute> : personnages
 # (homme, femme, narrateur) ; les curseurs de lecture s'ajoutent ici (phase 2). Une cle inconnue est refusee.
 DEFAUTS_BORNES = {"voix_h_vitesse": (0.7, 1.2), "voix_f_vitesse": (0.7, 1.2), "voix_n_vitesse": (0.7, 1.2),
@@ -42,6 +43,7 @@ def _brut():
         r["mode"] = "cloud"
     r["relais_moderation"] = r.get("relais_moderation") is True
     r["flou_discretion"] = r.get("flou_discretion") is not False       # v1.3.0 : absent = OUI (comportement d'avant)
+    r["petits_cris"] = r.get("petits_cris") is True                     # v1.7.0 : absent = NON (Quang : « ne sert a rien »)
     d = r.get("defauts") if isinstance(r.get("defauts"), dict) else {}      # v1.4.0 : on ne garde que le connu et le borne
     r["defauts"] = {k: v for k, v in d.items() if k in DEFAUTS_BORNES and isinstance(v, (int, float))
                     and DEFAUTS_BORNES[k][0] <= v <= DEFAUTS_BORNES[k][1]}
@@ -95,6 +97,8 @@ def ecrire(**kw):
         raise ValueError("relais_moderation : vrai ou faux")
     if not isinstance(r.get("flou_discretion"), bool):
         raise ValueError("flou_discretion : vrai ou faux")
+    if not isinstance(r.get("petits_cris"), bool):
+        raise ValueError("petits_cris : vrai ou faux")
     tmp = FICHIER + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(r, f, ensure_ascii=False)
@@ -109,6 +113,11 @@ def defaut(cle, sinon):
 
 def sur_pc():
     return _brut()["mode"] == "pc"
+
+
+def petits_cris():
+    """v1.7.0 (S16) : les gemissements / cris sans mots (« Ngh », « Ah ♡ », « Smack ») sont-ils des repliques a lire ?"""
+    return _brut()["petits_cris"]
 
 
 def relais_moderation():

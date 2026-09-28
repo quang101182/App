@@ -39,6 +39,8 @@ def copie():
             os.remove(os.path.join(T, f))
         except OSError:
             pass
+    # 1.29.0 (S16) : les sections A-H verifient que CHAQUE bulle a son entree (« ! » compris, marque non lu) -> petits cris LUS
+    json.dump({"petits_cris": True}, open(os.environ["MANGA_REGLAGES"], "w", encoding="utf-8"))
     return ch
 
 
@@ -178,7 +180,7 @@ check("C. relais coupe : page 6 a traiter", all(x["a_traiter"] for x in d["repli
 check("C. relais coupe : alerte 'dialogues' page 6", any(a["etape"] == "dialogues" and a["pages"] == [6] for a in al), al)
 check("C. relais coupe : aucun appel kimi", not any(mo == "kimi" for mo, _ in ETAT["appels"]), ETAT["appels"])
 ch = copie()
-json.dump({"relais_moderation": True}, open(os.environ["MANGA_REGLAGES"], "w", encoding="utf-8"))
+json.dump({"relais_moderation": True, "petits_cris": True}, open(os.environ["MANGA_REGLAGES"], "w", encoding="utf-8"))
 ETAT.update(qui5="Fille-Moustique", refuse={6}, appels=[])
 lancer(m)
 d = doc(ch)
@@ -235,7 +237,10 @@ def scenario_qui(m, verbeux=True):
     p5 = [b for b in next(p for p in tr["pages"] if p["page"] == 5)["bulles"] if b["type"] == "dialogue" and (b.get("trad") or "").strip()]
     b0 = sorted(p5, key=lambda b: b["id"])[0]
     os.makedirs(os.path.join(ch, "dialogues"), exist_ok=True)
-    json.dump({"pages": {"5": {"ordre": [{"id": b0["id"], "box": b0["box"], "qui": "Genos"}], "exclues": [], "ajouts": []}}},
+    # 1.29.0 : l'app enregistre l'ordre COMPLET (toutes les bulles non exclues) -- fixture alignee sur le vrai format
+    json.dump({"pages": {"5": {"ordre": [{"id": b0["id"], "box": b0["box"], "qui": "Genos"}]
+                                         + [{"id": b["id"], "box": b["box"]} for b in sorted(p5, key=lambda b: b["id"])[1:]],
+                               "exclues": [], "ajouts": []}}},
               open(os.path.join(ch, "dialogues", "bulles_verifiees.json"), "w", encoding="utf-8"), ensure_ascii=False)
     lancer(m)
     d = doc(ch)
@@ -251,6 +256,40 @@ def scenario_qui(m, verbeux=True):
 print("=== H. (S4, 1.27.0) qui parle choisi a la verification des bulles")
 scenario_qui(charger())
 
+def scenario_cris(m, verbeux=True):
+    """I (S16, 1.29.0) : interrupteur « petits cris » ETEINT -> « Ah... » et « ! » n'arrivent plus a l'IA ; une page VERIFIEE par
+    Quang ou il a GARDE un cri -> ce cri reste (sa liste fait loi) ; une bulle apparue apres sa validation -> exclue."""
+    k0 = len(KO)
+    ch = copie()
+    json.dump({"petits_cris": False}, open(os.environ["MANGA_REGLAGES"], "w", encoding="utf-8"))
+    ETAT.update(qui5="Fille-Moustique", refuse=set(), appels=[], textes=[])
+    tr = json.load(open(os.path.join(ch, "traduction", "fr", "traduction.json"), encoding="utf-8"))
+    bl = {p["page"]: sorted([b for b in p["bulles"] if b["type"] in ("dialogue", "narration") and (b.get("trad") or "").strip()],
+                            key=lambda b: b["id"]) for p in tr["pages"]}
+    cri7 = next(b for b in bl[7] if (b.get("trad") or "").strip() == "!")
+    # page 7 verifiee par Quang : il GARDE le « ! » et toutes les autres bulles SAUF la derniere (qui devient « apparue apres »)
+    garde7 = [b for b in bl[7] if b is not bl[7][-1]]
+    json.dump({"pages": {"7": {"ordre": [{"id": b["id"], "box": b["box"]} for b in garde7], "exclues": [], "ajouts": []}}},
+              open(os.path.join(ch, "dialogues", "bulles_verifiees.json") if os.path.isdir(os.path.join(ch, "dialogues"))
+                   else (os.makedirs(os.path.join(ch, "dialogues")) or os.path.join(ch, "dialogues", "bulles_verifiees.json")),
+                   "w", encoding="utf-8"), ensure_ascii=False)
+    lancer(m)
+    d = doc(ch)
+    textes = [(x["page"], (x.get("texte") or "").strip()) for x in d["repliques"]]
+    envoye = "\n".join(ETAT["textes"])
+    check("I. page 5 non verifiee : « Ah... » ignore (jamais envoye a l'IA)", (5, "Ah...") not in textes and '"texte": "Ah..."' not in envoye, textes)
+    check("I. page 7 verifiee : le « ! » GARDE par Quang reste", any(x["page"] == 7 and x["cle"] == "7-%d" % cri7["id"] for x in d["repliques"]),
+          [x["cle"] for x in d["repliques"] if x["page"] == 7])
+    check("I. page 7 : la bulle absente de sa validation n'est pas lue", not any(x["cle"] == "7-%d" % bl[7][-1]["id"] for x in d["repliques"]),
+          bl[7][-1]["id"])
+    check("I. les vraies repliques de la page 5 sont toutes la", all(any(x["cle"] == "5-%d" % b["id"] for x in d["repliques"])
+                                                                   for b in bl[5] if not m.est_gimmick(b.get("trad"))))
+    return len(KO) == k0
+
+
+print("=== I. (S16, 1.29.0) petits cris ignores + liste de Quang qui fait loi")
+scenario_cris(charger())
+
 print("=== E. mutations (doivent rendre le banc ROUGE)")
 for nom, patch in (("alias ignore", [('if q.lower() == p["nom"].lower() or q.lower() in [a.lower() for a in p.get("alias", [])]:',
                                       'if q.lower() == p["nom"].lower():')]),
@@ -263,6 +302,8 @@ for nom, patch, sc in (("fusion en fin de preparation (avant 1.8.1)", [('       
                                           'if q.lower() == p["nom"].lower():')], scenario),
                        ("corrections ecrasees", [('neuf.update({k: v for k, v in corr.items() if k in ("texte", "qui", "ton", "lire")})',
                                                   'pass')], scenario),
+                       ("petits cris jamais filtres (avant 1.29.0)", [('if not cris:', 'if False:')], scenario_cris),
+                       ("bulle apparue apres la verification gardee (avant 1.29.0)", [('    if nouvelles:', '    if False:')], scenario_cris),
                        ("qui de Quang ignore (avant 1.27.0)", [('"qui": (nom_connu(distrib, b["qui_impose"]) if b.get("qui_impose")',
                                                                 '"qui": (nom_connu(distrib, b["qui_impose"]) if False')], scenario_qui)):
     avant, avant_ok = len(KO), len(OK)

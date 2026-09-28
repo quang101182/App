@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.28.0"  # 1.28.0 (27/09, S2-bis) : doublons laisses par <= 1.25.0 (bulle entouree autour d'une bulle traduite) repares a la preparation ;  # 1.27.0 (27/09, S4) : « qui parle » choisi par Quang a la verification des bulles = impose a l'IA et a la replique ;  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.29.0"  # 1.29.0 (28/09, S16) : page VERIFIEE = la liste de Quang fait loi -- une bulle apparue APRES sa validation (complement de la traduction) est EXCLUE, sauf si elle est une bulle qu'il a entouree ;  # 1.28.0 (27/09, S2-bis) : doublons laisses par <= 1.25.0 (bulle entouree autour d'une bulle traduite) repares a la preparation ;  # 1.27.0 (27/09, S4) : « qui parle » choisi par Quang a la verification des bulles = impose a l'IA et a la replique ;  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -360,6 +360,15 @@ def preparer_pages(chap_dir, d, pages, distrib, narr, cat, stats, relais):
             reponses.append(r)
             stats.setdefault("_ajoutes", []).extend(fusionner_distribution(distrib, r.get("nouveaux"), cat))   # 1.8.1 : connu du lot suivant
             fait += len(lot)
+        except ValueError as e:                          # 1.29.0 (S16) : reponse illisible (pas de JSON) -> jamais un plantage
+            if len(lot) > 1:
+                log("  pages %s : reponse illisible (%s) -> une par une" % (nums, str(e)[:80]))
+                lots[:0] = [[p] for p in lot]
+                continue
+            a_traiter.append(lot[0]["page"])
+            log("  page %d A TRAITER (reponse illisible : %s)" % (lot[0]["page"], str(e)[:80]))
+            fait += 1
+            continue
         except mod.Refus as e:
             stats["cout_preparation"] = stats.get("cout_preparation", 0.0) + nc.cout(nc.ENGINES[e.moteur][1] if e.moteur in nc.ENGINES else "gemini-3.6-flash", getattr(e, "usage", None) or {})
             if len(lot) > 1:
@@ -539,6 +548,27 @@ def apparier(ref, bulles):
     return dedans[0][1] if dedans and dedans[0][0] >= 0.8 else None      # 1.26.0 : bulle connue DANS le trace
 
 
+# 1.29.0 (S16, Quang 28/09 : « les petits gimmicks de gemissement […] ne servent a rien, ce qui nous interesse ce sont les
+# textes ») : un texte fait SEULEMENT de cris / gemissements / bruits de bouche. Mesure sur les 6 chapitres verifies par Quang
+# (2 instances) : 21 de ses 26 exclusions reconnues ; les autres ne sont pas des cris (decor, « PUSH », « MADAME... »).
+# Meme regle dans l'app (dlvGimmick) : a changer ENSEMBLE (banc scripts/test_s16_bulles.py).
+_INTERJ = re.compile(r"(?:a+h*|h*a+h+|a+h*n+|h+n+g*|n+|n*g+h+|n+g+h*|n+f+u+|m+h*m+|m+p*h+|h+m+|m+|u+g+h+|u+h+|u+|o+h+|o+|"
+                     r"h+|e+h+|e+u+h+|h+e+(?:y+)?|h+u+|h+i+|h+y+a+|k+y+a+|u+w+a+h*|smack|slurp|lick|chu+|chup|s+e+p+|pant|"
+                     r"gasp|moan|(?:ha|he|hi|ho|hu|fu|ku|mu|chu)(?:ha|he|hi|ho|hu|fu|ku|mu|chu)+|f+u+|k+u+|h+a+)")
+
+
+def est_gimmick(texte):
+    """Au plus 3 « mots », tous des interjections (« Ngh », « Ah ♡ », « Smack », « Mhm », « NGH NGH HAAA »), ou rien que de la
+    ponctuation. Une vraie replique courte (« Commandant ! », « Oui, madame. », « Hein ? Mais ! ») n'en est pas un."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(texte or "")).encode("ascii", "ignore").decode().lower()
+    t = re.sub(r"[-\u2010\u2011'\u2019]", "", t)
+    mots = re.findall(r"[a-z]+", t)
+    if not mots:
+        return bool(str(texte or "").strip())
+    return len(mots) <= 3 and all(_INTERJ.fullmatch(m) for m in mots)
+
+
 def appliquer_verif(page, bulles, verif):
     """bulles de la page (deja filtrees) + la verification de Quang -> liste dans SON ordre, exclues retirees, ajouts (lus sur
     l'image par Gemini, comme une page deja en VF). Sans verification : inchangee. Chaque bulle recoit « ordre »."""
@@ -560,9 +590,18 @@ def appliquer_verif(page, bulles, verif):
             rang[id(b)] = i
             if str(r.get("qui") or "").strip():                             # 1.27.0 (S4) : choisi par Quang
                 b["qui_impose"] = str(r["qui"]).strip()[:40]
-    base = len(rang)
-    for b in sorted(reste, key=lambda x: x["id"]):
-        b["ordre"] = rang.get(id(b), base + b["id"] / 10000.0)
+    # 1.29.0 (28/09, S16, vecu) : Quang valide une page sur la DETECTION, puis « Tout faire » la traduit ; la traduction
+    # ajoute des « complements » (textes hors des bulles detectees : gemissements, bruits de bouche, ou la bulle qu'il a
+    # entouree retrouvee une 2e fois). Ils n'etaient ni dans son ordre ni dans ses exclusions -> gardes, lus, voises.
+    # Une page verifiee = SA liste : ce qu'il n'a pas vu n'entre pas (l'ecran les montre « nouvelles », un toucher les inclut).
+    nouvelles = [b for b in reste if id(b) not in rang]
+    if nouvelles:
+        log("  page %s : %d bulle(s) apparue(s) apres la verification, exclue(s) : %s" % (
+            page, len(nouvelles), ", ".join(str(b["id"]) for b in nouvelles)))
+        reste = [b for b in reste if id(b) in rang]
+    for b in reste:
+        b["ordre"] = rang.get(id(b), len(rang) + b["id"] / 10000.0)
+        b["valide"] = id(b) in rang                                       # 1.29.0 : choisie par Quang (jamais filtree ensuite)
     return sorted(reste, key=lambda x: x["ordre"])
 
 
@@ -812,12 +851,19 @@ def cmd_preparer(a):
     nc.STATS = stats
     voulues = set(nc_plage(a.pages, [p["page"] for p in tr["pages"]]))
     verif = lire_json(os.path.join(dd, "bulles_verifiees.json"))              # 1.19.0 (R30)
+    cris = reglages.petits_cris() if hasattr(reglages, "petits_cris") else True   # 1.29.0 (S16)
     pages = []
     for p in tr["pages"]:
         if p["page"] in voulues:
             p["_bulles"] = sorted([b for b in p["bulles"] if b["type"] in ("dialogue", "narration") and (not b.get("ecarte") or ecarte_pour_image(b))
                                    and ((b.get("trad") or "").strip() or b.get("a_lire"))], key=lambda b: b["id"])
             p["_bulles"] = appliquer_verif(p["page"], p["_bulles"], verif)      # 1.19.0 (R30) : exclues / ajouts / ORDRE de Quang
+            if not cris:                                                          # 1.29.0 (S16) : petits cris ignores (reglage)
+                g = [b for b in p["_bulles"] if not b.get("valide") and not b.get("ajout") and est_gimmick(b.get("trad"))]
+                if g:
+                    log("  page %d : %d petit(s) cri(s) ignore(s) : %s" % (p["page"], len(g), " | ".join((b.get("trad") or "")[:20] for b in g)))
+                    stats["petits_cris_ignores"] = stats.get("petits_cris_ignores", 0) + len(g)
+                    p["_bulles"] = [b for b in p["_bulles"] if not any(b is x for x in g)]
             if p["_bulles"]:
                 pages.append(p)
     if not pages:

@@ -7,7 +7,7 @@ ajouter_alerte() l'inscrit dans sources/_alertes.json (persistant, lu par l'app 
 """
 import json, os, re, time, uuid
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"  # 1.1.0 (28/09, S16) : refus « I cannot fulfill / I am unable to process… » reconnus (vecu : Gemini, preparation des Dialogues -> plantage)
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 ALERTES = os.environ.get("MANGA_ALERTES") or os.path.join(SRC, "_alertes.json")   # bancs : fichier jetable
@@ -16,9 +16,11 @@ _GEMINI_BLOC = {"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IMAGE_SAFE
                 "RECITATION", "OTHER_SAFETY"}
 _MARQUEURS_HTTP = re.compile(r"content[_ ]?filter|high risk|content exists risk|inappropriate|safety|prohibited|"
                              r"blocked|sensitive|moderation|policy", re.I)
-_REFUS_TEXTE = re.compile(r"^\W*(i'?m sorry|i am sorry|sorry,? (but )?i (can|cannot|can't)|i (cannot|can't|won't) "
-                          r"(help|assist|provide|describe|comply)|je (suis desole|suis désolé|ne peux pas)|"
-                          r"désolé,? (mais )?je ne peux)", re.I)
+_REFUS_TEXTE = re.compile(r"^\W*(i'?m sorry|i am sorry|sorry,? (but )?i (can|cannot|can't)|"
+                          r"i(?: cannot| can ?not| can't| won't|(?: am|'m) (?:unable|not able) to) "
+                          r"(help|assist|provide|describe|comply|fulfill|fulfil|process|generate|create|analy[sz]e|"
+                          r"produce|complete|continue|engage|do|transcribe|translate|read)|"
+                          r"je (suis desole|suis désolé|ne peux pas)|désolé,? (mais )?je ne peux)", re.I)
 
 
 class Refus(Exception):

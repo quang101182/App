@@ -29,7 +29,7 @@ import moderation as mod             # v2.6.0 : refus reconnus, alertes persista
 import depenses as dep               # v2.6.0 : registre des depenses en ajout seul
 from datetime import datetime
 
-VERSION = "2.12.0"
+VERSION = "2.13.0"  # 2.13.0 (28/09, S16) : Gemini qui refuse EN TOUTES LETTRES = Refus (relais), plus « JSON illisible » ;
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -121,6 +121,12 @@ def appel_vision(engine, system, content, max_tokens, reflexion=None):
                     "completion_tokens": um.get("candidatesTokenCount", 0) + um.get("thoughtsTokenCount", 0)}
         raise e_
     texte = "".join(p.get("text", "") for p in ((r.get("candidates") or [{}])[0].get("content") or {}).get("parts", []))
+    motif = mod.refus_texte(texte)                 # 28/09 (S16) : Gemini peut aussi REFUSER EN TOUTES LETTRES, sans blocage
+    if motif:                                      # officiel (« I cannot fulfill this request… ») -> meme chemin qu'un refus
+        e_ = mod.Refus("gemini", motif)
+        e_.usage = {"prompt_tokens": um.get("promptTokenCount", 0),
+                    "completion_tokens": um.get("candidatesTokenCount", 0) + um.get("thoughtsTokenCount", 0)}
+        raise e_
     return texte, {"prompt_tokens": um.get("promptTokenCount", 0),
                    "completion_tokens": um.get("candidatesTokenCount", 0) + um.get("thoughtsTokenCount", 0)}
 
