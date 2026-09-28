@@ -36,6 +36,9 @@ check("MANGA Plus « /viewer/1000233 » -> « /viewer/1000234 » : chapitre CHAN
       cp is not None and not meme("https://mangaplus.shueisha.co.jp/viewer/1000233", "https://mangaplus.shueisha.co.jp/viewer/1000234"))
 check("« chapter-12/ » -> « chapter-13/ » : chapitre CHANGÉ", cp is not None and not meme("https://s.example/m/chapter-12/", "https://s.example/m/chapter-13/"))
 check("« ?style=list » et « #top » ignorés", meme(H % 1 + "?style=list", H % 1 + "#top"))
+G = "https://gal.example/s/%s/3904141-%d"
+check("0.8.9 : « /s/<clé>/<galerie>-1 » -> « /s/<autre clé>/<galerie>-2 » : MÊME chapitre", meme(G % ("9b0c35bf36", 1), G % ("3db0618666", 2)))
+check("0.8.9 : autre galerie -> chapitre CHANGÉ", cp is not None and not meme(G % ("9b0c35bf36", 1), "https://gal.example/s/9b0c35bf36/3904142-1"))
 av = getattr(m, "adresse_suivante", None)
 L = ["https://site.example/hentai/serie-5/english/p/1/", "https://site.example/hentai/serie/english/p/1/",
      "https://site.example/hentai/serie-8/english/p/1/", "https://site.example/hentai/serie-7/english/p/1/#x", "https://site.example/tag/7/"]

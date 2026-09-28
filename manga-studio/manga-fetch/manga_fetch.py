@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.8.8"  # 0.8.8 (28/09) : 1re page du chapitre suivant retiree de la fin du precedent ; 0.8.7 (28/09) : enchainement « meme adresse au n° pres » ; 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
+VERSION = "0.8.9"  # 0.8.9 (28/09) : pages « /s/<cle>/<galerie>-<page> » = une seule galerie ; 0.8.8 (28/09) : 1re page du chapitre suivant retiree de la fin du precedent ; 0.8.7 (28/09) : enchainement « meme adresse au n° pres » ; 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -434,6 +434,7 @@ def vol_suivant(slugs, courant_slug: str, jusqua=None, entiers: bool = False):
 
 
 RE_PAGE_FINALE = re.compile(r"/(?:p|page|pg)[-/]\d+/?$", re.I)   # 0.8.6 : « .../p/3/ », « .../page/3 », « .../page-3/ »
+RE_PAGE_GALERIE = re.compile(r"/s/[0-9a-f]{6,16}/(\d+)-\d+/?$", re.I)  # 0.8.9 : « /s/<cle hex>/<galerie>-<page> » (cle changeante)
 
 
 def chapitre_path(u: str) -> str:
@@ -442,6 +443,9 @@ def chapitre_path(u: str) -> str:
     2. MangaDex : /chapter/<uuid 36>/<n> -- ne retirer le segment numerique final QUE s'il suit un segment long non
        numerique (UUID), sinon /viewer/1000233 (MANGA Plus) perdrait son identifiant (bug 18:13 du 21/09)."""
     u = (u or "").split("?")[0].split("#")[0]
+    g = RE_PAGE_GALERIE.search(u)
+    if g:                                                   # 0.8.9 : la galerie, pas la page (ni sa cle)
+        return u[:g.start()] + "/s/-/" + g.group(1)
     m = RE_PAGE_FINALE.search(u)
     if m:
         return u[:m.start()]
