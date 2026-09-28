@@ -36,5 +36,12 @@ check("MANGA Plus « /viewer/1000233 » -> « /viewer/1000234 » : chapitre CHAN
       cp is not None and not meme("https://mangaplus.shueisha.co.jp/viewer/1000233", "https://mangaplus.shueisha.co.jp/viewer/1000234"))
 check("« chapter-12/ » -> « chapter-13/ » : chapitre CHANGÉ", cp is not None and not meme("https://s.example/m/chapter-12/", "https://s.example/m/chapter-13/"))
 check("« ?style=list » et « #top » ignorés", meme(H % 1 + "?style=list", H % 1 + "#top"))
+av = getattr(m, "adresse_suivante", None)
+L = ["https://site.example/hentai/serie-5/english/p/1/", "https://site.example/hentai/serie/english/p/1/",
+     "https://site.example/hentai/serie-8/english/p/1/", "https://site.example/hentai/serie-7/english/p/1/#x", "https://site.example/tag/7/"]
+check("0.8.7 : « …-7/…/p/12/ » -> lien « …-8/…/p/1/ » = SUIVANT", av is not None and av("https://site.example/hentai/serie-7/english/p/12/", L, "7") == L[2])
+check("0.8.7 : pas de N+1 sur la page -> rien (ni le 5, ni le 1er)", av is not None and av("https://site.example/hentai/serie-8/english/p/1/", L[:2], "8") == "")
+check("0.8.7 : deux nombres différents -> rien (autre œuvre)", av is not None and av("https://s.example/a-7/b-1/", ["https://s.example/a-8/b-2/"], "7") == "")
+check("0.8.7 : même adresse (page seule) -> rien", av is not None and av("https://site.example/hentai/serie-7/english/p/1/", ["https://site.example/hentai/serie-7/english/p/2/"], "7") == "")
 print("\nVERDICT : %d/%d" % (len(OK), len(OK) + len(KO)))
 sys.exit(1 if KO else 0)

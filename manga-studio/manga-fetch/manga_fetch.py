@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.8.6"  # 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
+VERSION = "0.8.7"  # 0.8.7 (28/09) : enchainement « meme adresse au n° pres » ; 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -409,6 +409,27 @@ def chapitre_path(u: str) -> str:
     return u
 
 
+def adresse_suivante(avant: str, liens, courant) -> str:
+    """0.8.7 : parmi les liens de la page, celui du chapitre SUIVANT quand les adresses ne different QUE par le numero
+    (« serie-7/english/p/1/ » -> « serie-8/english/p/1/ ») : memes morceaux non numeriques, un seul nombre change, de N a N+1.
+    Rend l'adresse du lien (telle quelle) ou ""."""
+    try:
+        n0 = int(_num(courant))
+    except Exception:
+        return ""
+    base = re.split(r"(\d+)", chapitre_path(avant).rstrip("/"))
+    for h in liens or []:
+        h = (h or "").split("#")[0]
+        hb = re.split(r"(\d+)", chapitre_path(h).rstrip("/"))
+        if len(hb) != len(base) or hb == base:
+            continue
+        diff = [i for i in range(len(base)) if base[i] != hb[i]]
+        if len(diff) == 1 and diff[0] % 2 == 1 and base[diff[0]].isdigit() and hb[diff[0]].isdigit() \
+                and int(base[diff[0]]) == n0 and int(hb[diff[0]]) == n0 + 1:
+            return h
+    return ""
+
+
 def enchainement_possible(url: str):
     """v0.6.8 (24/09) : ce site permet-il d'enchainer les chapitres ? Memes formats que chapitre_suivant() ci-dessous,
     et meme reponse que capEnchainement() dans manga_studio.html (banc scripts/test_enchainement.py).
@@ -478,6 +499,10 @@ def _suivant_par_page(page, url_chapitre: str, courant: str, jusqua, entiers: bo
         const a = [...document.querySelectorAll('a[href]')].find(x => ok(x) &&
             /^(chapitre suivant|chap(\.|itre)? suiv(\.|ant)|next chapter|next ch(\.|apter)?)\b/i.test((x.innerText || x.title || '').trim()));
         return a ? a.href : null; }""", avant)
+    if not lien:                                                               # 0.8.7 : meme adresse au n° pres
+        lien = adresse_suivante(avant, page.evaluate("() => [...document.querySelectorAll('a[href]')].map(a => a.href)"), courant) or None
+        if lien:
+            log_evt("série", "chapitre suivant trouvé par l'adresse (même adresse au numéro près)", lien=lien)
     if not lien:
         return _suivant_par_bouton(page, avant, courant, jusqua, entiers)       # v0.7.2
     n = _format_num(int(_num(courant)) + 1)
