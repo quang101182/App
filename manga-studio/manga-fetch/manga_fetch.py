@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.8.7"  # 0.8.7 (28/09) : enchainement « meme adresse au n° pres » ; 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
+VERSION = "0.8.8"  # 0.8.8 (28/09) : 1re page du chapitre suivant retiree de la fin du precedent ; 0.8.7 (28/09) : enchainement « meme adresse au n° pres » ; 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -305,6 +305,50 @@ def _meme_contenu(out: str, title: str, precedent: str, courant: str):
     b = _empreintes(chap_dir(out, title, precedent))
     communes = len(a & b)
     return f"{communes}/{len(a)} images identiques" if communes >= 0.8 * len(a) else None
+
+
+def retirer_debut_suivant(prec: str, suiv: str) -> str:
+    """0.8.8 : la DERNIERE page du chapitre precedent a-t-elle les memes octets que la 1re du suivant ? (site qui enchaine les
+    chapitres a la verticale : l'image d'ouverture du suivant est chargee avant que l'adresse change.) Alors elle sort du
+    precedent -- deplacee dans <prec>/_retirees/, jamais effacee -- et le manifeste du precedent est mis a jour.
+    Rend le nom du fichier retire, ou ""."""
+    import hashlib
+    try:
+        mp = json.load(open(os.path.join(prec, "manifest.json"), encoding="utf-8"))
+        ms = json.load(open(os.path.join(suiv, "manifest.json"), encoding="utf-8"))
+        der, pre = (mp.get("pages") or [])[-1]["file"], (ms.get("pages") or [])[0]["file"]
+    except Exception:
+        return ""
+    h = lambda p: hashlib.md5(open(p, "rb").read()).hexdigest()
+    fp, fs = os.path.join(prec, der), os.path.join(suiv, pre)
+    if len(mp["pages"]) < 2 or not (os.path.isfile(fp) and os.path.isfile(fs)) or os.path.getsize(fp) != os.path.getsize(fs) or h(fp) != h(fs):
+        return ""
+    os.makedirs(os.path.join(prec, "_retirees"), exist_ok=True)
+    os.replace(fp, os.path.join(prec, "_retirees", der))
+    mp["pages"] = mp["pages"][:-1]
+    mp.setdefault("notes", []).append("dernière page retirée (%s) : c'était la 1re du chapitre suivant (%s)" % (der, os.path.basename(suiv)))
+    json.dump(mp, open(os.path.join(prec, "manifest.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    log_evt("série", "1re page du chapitre suivant retirée de la fin du précédent", precedent=os.path.basename(prec),
+            suivant=os.path.basename(suiv), fichier=der)
+    return der
+
+
+def dedoublonner_serie(serie_dir: str) -> int:
+    """0.8.8 : retirer_debut_suivant() sur chaque paire de chapitres CONSECUTIFS deja presents d'une serie."""
+    chs = []
+    for d in os.listdir(serie_dir):
+        m = re.fullmatch(r"ch_(\d+(?:[.-]\d+)?)", d)
+        if m and os.path.isfile(os.path.join(serie_dir, d, "manifest.json")):
+            chs.append((float(m.group(1).replace("-", ".")), d))
+    chs.sort()
+    n = 0
+    for (a, da), (b, db) in zip(chs, chs[1:]):
+        r = retirer_debut_suivant(os.path.join(serie_dir, da), os.path.join(serie_dir, db))
+        if r:
+            print(f"{da} : {r} retirée (= 1re page de {db})")
+            n += 1
+    print(f"{n} page(s) retirée(s)")
+    return 0
 
 
 def _mettre_de_cote(dossier: str, pourquoi: str):
@@ -1742,6 +1786,8 @@ def capture(args) -> int:
                              f" — reprise au ch. {num}")
                     log_evt("sécurité", "contenu identique", chapitre=num, precedent=chap, mis_de_cote=cote or "")
                     break
+            if not DERNIER.get("deja_la"):                    # 0.8.8 : image d'ouverture du suivant restee en fin du precedent
+                retirer_debut_suivant(chap_dir(args.out, args.title, chap), chap_dir(args.out, args.title, num))
             faits.append(num)
             chap = num
             if c2 == 3:
@@ -2057,6 +2103,9 @@ def main() -> int:
     s = sub.add_parser("verify", help="contrôler manifeste <-> fichiers")
     s.add_argument("dossier")
 
+    s = sub.add_parser("dedoublonner", help="0.8.8 : retirer d'un chapitre sa derniere page si c'est la 1re du suivant")
+    s.add_argument("serie_dir")
+
     s = sub.add_parser("liste", help="vue des mangas déjà présents dans sources/")
     s.add_argument("--titres", action="store_true", help="une ligne par titre (pour le .bat)")
 
@@ -2087,6 +2136,8 @@ def main() -> int:
         return 0
     if args.cmd == "verify":
         return verify(args.dossier)
+    if args.cmd == "dedoublonner":
+        return dedoublonner_serie(args.serie_dir)
     if args.cmd == "liste":
         return lister_sources(DEFAULT_OUT, getattr(args, "titres", False))
     if args.cmd == "launch-edge":
