@@ -47,7 +47,7 @@ for f in os.listdir(cd):
 man = json.load(open(os.path.join(cd, "manifest.json"), encoding="utf-8"))
 for n, q in enumerate(man.get("pages") or [], 1):
     dst = os.path.join(T, serie, chap, q["file"])
-    shutil.copy2(os.path.join(cd, q["file"]), dst) if n in (5, 6, 7) else open(dst, "wb").close()
+    shutil.copy2(os.path.join(cd, q["file"]), dst) if n in (5, 6, 7, 8, 9) else open(dst, "wb").close()
 tr = json.load(open(os.path.join(cd, "traduction", "fr", "traduction.json"), encoding="utf-8"))
 tr["pages"] = [p for p in tr["pages"] if p["page"] in (5, 6, 7)]
 for p in tr["pages"]:
@@ -55,6 +55,11 @@ for p in tr["pages"]:
     shutil.copy2(os.path.join(cd, "traduction", "fr", p["file"]), os.path.join(T, serie, chap, "traduction", "fr", p["file"]))
 json.dump(tr, open(os.path.join(T, serie, chap, "traduction", "fr", "traduction.json"), "w", encoding="utf-8"), ensure_ascii=False)
 VF = os.path.join(T, serie, chap, "dialogues", "bulles_verifiees.json")
+# S17 (v3.5.9) : p.8 en DETECTION SEULE, texte lu sur la page (dialogues.py detecter 1.30.0) -> les cris de cote des l'ouverture
+LU8 = [("SQUISH S", {"x": 0.1, "y": 0.1, "w": 0.06, "h": 0.05}), ("SuCK", {"x": 0.5, "y": 0.2, "w": 0.05, "h": 0.1}),
+       ("Show me your miserable face.", {"x": 0.3, "y": 0.5, "w": 0.12, "h": 0.1}), ("", {"x": 0.7, "y": 0.7, "w": 0.05, "h": 0.12})]
+json.dump({"pages": {"8": {"file": man["pages"][7]["file"], "bulles": [{"id": i + 1, "box": b, "lu": t} for i, (t, b) in enumerate(LU8)]}}},
+          open(os.path.join(T, serie, chap, "dialogues", "detection.json"), "w", encoding="utf-8"))
 json.dump({"pages": {"5": G["8"]["verif"], "6": G["9"]["verif"]}}, open(VF, "w", encoding="utf-8"))
 REG = os.path.join(T, "_reglages.json")
 for f in ("_reglages.json",):
@@ -89,7 +94,7 @@ try:
             pg.evaluate("s => { localStorage.setItem('manga_onglet','tChap'); localStorage.setItem('manga_serie', s); localStorage.setItem('manga_dlv_aide','0'); }", serie)
             pg.reload(); pg.wait_for_timeout(3500)
             pg.evaluate("d => openChap(CHAPS.findIndex(c => c.dir === d))", CH); pg.wait_for_timeout(2500)
-            pg.evaluate("() => dlvOuvrir('5-7')"); pg.wait_for_timeout(4000)
+            pg.evaluate("() => dlvOuvrir('5-8')"); pg.wait_for_timeout(4000)
             etat = lambda: pg.evaluate("""() => { const p = dlvPage(), R = +$('dlvSvg').dataset.r;
                 const c = [...document.querySelectorAll('#dlvSvg [data-dlv-k] circle')].map(e => [+e.getAttribute('cx'), +e.getAttribute('cy')]);
                 let sup = 0; c.forEach((a, i) => c.forEach((b, j) => { if (j > i && Math.hypot(a[0] - b[0], a[1] - b[1]) < R) sup++; }));
@@ -128,11 +133,29 @@ try:
             pg.mouse.click(P[k]["x"], P[k]["y"]); pg.wait_for_timeout(400)
             e7d = etat()
             check("toucher un cri de cote = inclus (3 numerotees)", e7d["t"].count("✕") == 3, e7d["t"])
+            pg.evaluate("() => dlvAller(3)"); pg.wait_for_timeout(900)
+            e8 = etat()
+            check("p.8 (detection seule, texte lu) : « SQUISH S » et « SuCK » de cote, la phrase et l'illisible numerotees",
+                  e8["page"] == 8 and sorted(e8["t"]) == ["1", "2", "✕", "✕"] and sorted(x["id"] for x in e8["items"] if x["cri"]) == [1, 2], (e8["t"], e8["items"]))
+            check("p.8 : barre « 🔇 2 petits cris »", "🔇 2" in e8["barre"], e8["barre"])
             pg.evaluate("() => $('dlvGo').click()"); pg.wait_for_timeout(2500)
             v = json.load(open(VF, encoding="utf-8"))["pages"]
             check("✓ Valider : p.6 enregistree avec les 2 nouveaux en EXCLUES", sorted(x["id"] for x in v["6"]["exclues"]) == [1, 2, 102, 103], v["6"]["exclues"])
             check("✓ Valider : p.7 = 3 de cote en exclues, 3 dans l'ordre", len(v["7"]["exclues"]) == 3 and len(v["7"]["ordre"]) == 3, v["7"])
+            check("✓ Valider : p.8 = ses 2 cris en exclues", sorted(x["id"] for x in v.get("8", {}).get("exclues", [])) == [1, 2], v.get("8"))
             check("✓ Valider : p.5 = 5 dans l'ordre, dont ses 3 entourees", len(v["5"]["ordre"]) == 5 and len(v["5"]["ajouts"]) == 3, v["5"])
+            if LARG == LARGS[0]:                          # S17 : page detectee AVANT la lecture -> re-detection reelle a l'ouverture
+                dj = os.path.join(T, serie, chap, "dialogues", "detection.json"); dd = json.load(open(dj, encoding="utf-8"))
+                dd["pages"]["9"] = {"file": man["pages"][8]["file"], "bulles": [{"id": 1, "box": {"x": 0.2, "y": 0.2, "w": 0.1, "h": 0.1}}]}
+                json.dump(dd, open(dj, "w", encoding="utf-8"))
+                pg.evaluate("() => { $('dlvBox').hidden = true; }")
+                pg.evaluate("() => dlvOuvrir('9-9')")
+                for _ in range(60):
+                    pg.wait_for_timeout(1500)
+                    if pg.evaluate("() => !!(DLV.pages[0] && DLV.pages[0].lu === true && $('dlvAttente').hidden)"): break
+                d9 = json.load(open(dj, encoding="utf-8"))["pages"]["9"]["bulles"]
+                check("page detectee sans lecture -> re-detection a l'ouverture : chaque zone porte « lu »", d9 and all("lu" in b for b in d9), len(d9))
+                check("... et l'ecran l'affiche avec le texte lu", pg.evaluate("() => DLV.pages[0].lu === true && DLV.pages[0].bulles.some(b => b.texte)"))
             check("aucune erreur JavaScript", not errs, errs[:2])
             ctx.close()
         br.close()

@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.29.0"  # 1.29.0 (28/09, S16) : page VERIFIEE = la liste de Quang fait loi -- une bulle apparue APRES sa validation (complement de la traduction) est EXCLUE, sauf si elle est une bulle qu'il a entouree ;  # 1.28.0 (27/09, S2-bis) : doublons laisses par <= 1.25.0 (bulle entouree autour d'une bulle traduite) repares a la preparation ;  # 1.27.0 (27/09, S4) : « qui parle » choisi par Quang a la verification des bulles = impose a l'IA et a la replique ;  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.30.0"  # 1.30.0 (28/09, S17) : petits cris reconnus aussi sur le texte LU a la detection (bruitages anglais en mots, debris de lecture) ;  # 1.29.0 (28/09, S16) : page VERIFIEE = la liste de Quang fait loi -- une bulle apparue APRES sa validation (complement de la traduction) est EXCLUE, sauf si elle est une bulle qu'il a entouree ;  # 1.28.0 (27/09, S2-bis) : doublons laisses par <= 1.25.0 (bulle entouree autour d'une bulle traduite) repares a la preparation ;  # 1.27.0 (27/09, S4) : « qui parle » choisi par Quang a la verification des bulles = impose a l'IA et a la replique ;  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -552,21 +552,32 @@ def apparier(ref, bulles):
 # textes ») : un texte fait SEULEMENT de cris / gemissements / bruits de bouche. Mesure sur les 6 chapitres verifies par Quang
 # (2 instances) : 21 de ses 26 exclusions reconnues ; les autres ne sont pas des cris (decor, « PUSH », « MADAME... »).
 # Meme regle dans l'app (dlvGimmick) : a changer ENSEMBLE (banc scripts/test_s16_bulles.py).
-_INTERJ = re.compile(r"(?:a+h*|h*a+h+|a+h*n+|h+n+g*|n+|n*g+h+|n+g+h*|n+f+u+|m+h*m+|m+p*h+|h+m+|m+|u+g+h+|u+h+|u+|o+h+|o+|"
+_INTERJ = re.compile(r"(?:g+u+h+|f+g*h+|a+h*|h*a+h+|a+h*n+|h+n+g*|n+|n*g+h+|n+g+h*|n+f+u+|m+h*m+|m+p*h+|h+m+|m+|u+g+h+|u+h+|u+|o+h+|o+|"
                      r"h+|e+h+|e+u+h+|h+e+(?:y+)?|h+u+|h+i+|h+y+a+|k+y+a+|u+w+a+h*|smack|slurp|lick|chu+|chup|s+e+p+|pant|"
                      r"gasp|moan|(?:ha|he|hi|ho|hu|fu|ku|mu|chu)(?:ha|he|hi|ho|hu|fu|ku|mu|chu)+|f+u+|k+u+|h+a+)")
 
 
+# 1.30.0 (S17) : a la DETECTION, le texte est LU sur l'image (RapidOCR) et reste en anglais : bruitages en vrais mots (« SQUISH »,
+# « SUCK », « SPURT », « PUSH » -- exclus par Quang) et DEBRIS de lecture d'un bruitage dessine (« S S », « E B », « lh »). Un debris
+# = mot de 1-2 lettres qui n'est pas un vrai petit mot (« OK », « No », « I », « je », « tu »...). Mesure 28/09 : aucune replique
+# gardee par Quang prise pour un cri.
+_SFX = re.compile(r"(?:suck|squish|squelch|spurt|slick|spit|slurp|splash|splat|splish|drip|drool|smooch|kiss|click|clack|clink|clang|snap|crack|rustle|thud|thump|bam|boom|whoosh|swish|clap|slap|rub|grab|push|grip|squeeze|twitch|throb|gush|shudder|jerk|pump|thrust|flick|poke|pinch|squirt|squirm|shlick|schlick|plap|pap|pomf|boing|jiggle|wiggle|shiver|tremble|shake|sniff|gulp|glug|gulk|slosh|creak|thwack|smack|slurp|lick|chu+|chup)(?:e?s|ed|ing)?")
+_MOTS2 = set("ok|no|hi|oi|me|go|so|we|us|it|is|do|up|my|be|an|or|if|on|at|to|in|of|by|yo|ya|ne|je|tu|il|la|le|un|si|et|ou|ni|te|se|ce|ma|ta|sa|i".split("|"))
+
+
 def est_gimmick(texte):
-    """Au plus 3 « mots », tous des interjections (« Ngh », « Ah ♡ », « Smack », « Mhm », « NGH NGH HAAA »), ou rien que de la
-    ponctuation. Une vraie replique courte (« Commandant ! », « Oui, madame. », « Hein ? Mais ! ») n'en est pas un."""
+    """Au plus 3 « mots », tous des interjections (« Ngh », « Ah ♡ », « Mhm »), des bruitages (« SQUISH », « Smack ») ou des debris
+    de lecture (« S », « lh ») -- avec au moins un vrai cri / bruitage, ou uniquement des debris ; ou rien que de la ponctuation.
+    Une vraie replique courte (« Commandant ! », « Oui, madame. », « OK ! », « Hein ? Mais ! ») n'en est pas un."""
     import unicodedata
     t = unicodedata.normalize("NFKD", str(texte or "")).encode("ascii", "ignore").decode().lower()
     t = re.sub(r"[-\u2010\u2011'\u2019]", "", t)
     mots = re.findall(r"[a-z]+", t)
     if not mots:
         return bool(str(texte or "").strip())
-    return len(mots) <= 3 and all(_INTERJ.fullmatch(m) for m in mots)
+    if len(mots) > 3 or any(m in _MOTS2 for m in mots):
+        return False
+    return all(_INTERJ.fullmatch(m) or _SFX.fullmatch(m) or len(m) <= 2 for m in mots)
 
 
 def appliquer_verif(page, bulles, verif):
@@ -611,6 +622,43 @@ def rang(x):
     return o if o is not None else (x.get("id") or 0)
 
 
+_OCR = {}
+
+
+def lire_zone(im, box):
+    """1.30.0 (S17) : le texte ECRIT dans une zone detectee, lu sur le PC (RapidOCR, gratuit, rien ne sort). Sert a reconnaitre
+    les petits cris AVANT toute traduction. -> texte ("" = rien lu), ou None si le lecteur est indisponible.
+    Zone recadree avec 15 % de marge, 64 px de haut au moins ; zone haute et etroite illisible -> relue pivotee (bruitage
+    vertical). Mesure 28/09 sur les pages verifiees par Quang : 0 replique gardee prise pour un cri, 0,4 s par zone."""
+    if "o" not in _OCR:
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            _OCR["o"] = RapidOCR()
+        except Exception as e:
+            log("  lecteur de texte indisponible (%s) : petits cris reconnus seulement apres la traduction" % str(e)[:100])
+            _OCR["o"] = None
+    o = _OCR["o"]
+    if o is None:
+        return None
+    import numpy as np
+    W, H = im.size
+    mx, my = box["w"] * 0.15, box["h"] * 0.15
+    c = im.crop((max(0, int((box["x"] - mx) * W)), max(0, int((box["y"] - my) * H)),
+                 min(W, int((box["x"] + box["w"] + mx) * W)), min(H, int((box["y"] + box["h"] + my) * H)))).convert("RGB")
+    essais = [c] + ([c.rotate(90, expand=True), c.rotate(-90, expand=True)] if c.height > 1.6 * c.width else [])
+    for x in essais:
+        if x.height < 64:
+            x = x.resize((max(1, int(x.width * 64 / x.height)), 64))
+        try:
+            r, _ = o(np.array(x))
+        except Exception:
+            r = None
+        t = " ".join(y[1] for y in (r or [])).strip()
+        if t:
+            return t
+    return ""
+
+
 def cmd_detecter(a):
     """Detection SEULE (gratuite, sur le PC) des pages demandees qui ne sont PAS encore traduites -> dialogues/detection.json.
     Memes fonction et seuils que la traduction (traduire_chapitre.zones_texte) : ses n° correspondent aux siens."""
@@ -636,7 +684,23 @@ def cmd_detecter(a):
         except Exception as e:
             log("  page %d : detection impossible (%s)" % (n, str(e)[:120]))
             texts = []
-        doc["pages"][str(n)] = {"file": fichiers[n - 1], "bulles": [{"id": t["id"], "box": {q: round(t[q], 4) for q in ("x", "y", "w", "h")}} for t in texts]}
+        bulles = [{"id": t["id"], "box": {q: round(t[q], 4) for q in ("x", "y", "w", "h")}} for t in texts]
+        if bulles:                                        # 1.30.0 (S17) : texte lu -> petits cris reconnus des la detection
+            im_ = ip.load_page(img)
+            lus = cris = vides = 0
+            for b in bulles:
+                t = lire_zone(im_, b["box"])
+                if t is None:                             # lecteur indisponible : zones marquees « non lues » (None), jamais
+                    for b2 in bulles:                     # absentes -- sinon l'app relancerait la detection a chaque ouverture
+                        b2.setdefault("lu", None)
+                    break
+                b["lu"] = t
+                lus += 1
+                vides += not t
+                cris += bool(t) and est_gimmick(t)
+            if lus:
+                log("  page %d : %d zone(s) lue(s), %d petit(s) cri(s), %d illisible(s)" % (n, lus, cris, vides))
+        doc["pages"][str(n)] = {"file": fichiers[n - 1], "bulles": bulles}
     doc["maj"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     ecrire_json(f, doc)
     nc.progres("detection", len(voulues), len(voulues), fini=True)
