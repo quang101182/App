@@ -16,7 +16,10 @@ import os, sys
 from playwright.sync_api import sync_playwright
 
 KEY = open(os.path.expanduser(r"~\Documents\ComfyUI\.studio_secret"), encoding="utf-8").read().strip()
-PORT = sys.argv[1] if len(sys.argv) > 1 else "8190"
+_a = sys.argv[1:]; PAGE = None
+if "--page" in _a:                                # v3.5.6 : tester une version avant de la servir
+    _i = _a.index("--page"); PAGE = open(_a[_i + 1], encoding="utf-8").read(); del _a[_i:_i + 2]
+PORT = _a[0] if _a else "8190"
 OK, KO = [], []
 
 
@@ -43,6 +46,8 @@ with sync_playwright() as p:
             r = rt.request
             if r.method == "POST" and not any(k in r.url for k in ("activite", "costs", "fetch_status", "savelog")):
                 ecrit.append(r.url); return rt.abort()
+            if PAGE and r.method == "GET" and r.url.split("#")[0].split("?")[0].rstrip("/").endswith("/manga"):
+                return rt.fulfill(status=200, body=PAGE, content_type="text/html; charset=utf-8")
             rt.continue_()
         pg.route("**/*", route)
         pg.goto("http://127.0.0.1:%s/manga#k=%s" % (PORT, KEY)); pg.wait_for_timeout(2500)
@@ -52,11 +57,12 @@ with sync_playwright() as p:
         pg.evaluate("() => scrollTo(0, 0)"); pg.wait_for_timeout(400)
         check("série, en haut : barre DÉJÀ affichée (v2.54.0 : toujours là)", vis())
         etat = pg.evaluate("() => [...$('navFlot').querySelectorAll('.nf-b:not(#nfRep)')].map(b => b.id + (b.hidden ? ':cache' : b.disabled ? ':grise' : ':actif'))")
-        check("série, en haut : 5 boutons, ‹ › et ↑ GRISÉS (jamais masqués)", etat == ["nfRet:actif", "nfPrev:grise", "nfRefr:actif", "nfSuiv:grise", "nfHaut:grise"], etat)
+        vs = pg.evaluate("() => ['nfPrev:' + (nfSerieVoisine(-1) ? 'actif' : 'grise'), 'nfSuiv:' + (nfSerieVoisine(1) ? 'actif' : 'grise')]")                  # v3.5.6 : ‹ › = series voisines
+        check("série, en haut : 5 boutons, ‹ › = séries voisines, ↑ GRISÉ (jamais masqués)", etat == ["nfRet:actif", vs[0], "nfRefr:actif", vs[1], "nfHaut:grise"], (etat, vs))
         pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(500)
         check("série, descendu : barre visible", vis())
         etat = pg.evaluate("() => [...$('navFlot').querySelectorAll('.nf-b:not(#nfRep)')].map(b => b.id + (b.hidden ? ':cache' : b.disabled ? ':grise' : ':actif'))")
-        check("série, descendu : ← ↻ ↑ actifs, ‹ › grisés", etat == ["nfRet:actif", "nfPrev:grise", "nfRefr:actif", "nfSuiv:grise", "nfHaut:actif"], etat)
+        check("série, descendu : ← ↻ ↑ actifs, ‹ › = séries voisines", etat == ["nfRet:actif", vs[0], "nfRefr:actif", vs[1], "nfHaut:actif"], (etat, vs))
         info = pg.evaluate("() => [$('nfInfoTxt').textContent, getComputedStyle($('nfInfo')).backgroundColor, $('nfInfo').getBoundingClientRect().left < $('nfRet').getBoundingClientRect().left]")
         check("bulle VERTE « où je suis », à gauche des boutons : le nom du manga", info[0] == "One Punch-Man" and info[1] == "rgb(31, 91, 58)" and info[2], info)
         coupes = pg.evaluate("() => [...$('navFlot').querySelectorAll('.nf-b')].filter(b => b.scrollWidth > b.clientWidth + 1).map(b => b.textContent)")
@@ -111,8 +117,10 @@ with sync_playwright() as p:
         check("← (chapitre) : retour à la série", pg.evaluate("() => !CHAP_OPEN && LIB_SERIE === 'one-punch-man'"))
         if tel:
             pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(600)
+            prec = pg.evaluate("() => (nfSerieVoisine(-1) || {}).slug || null")
             pg.evaluate(GLISSE, [-140]); pg.wait_for_timeout(1500)
-            check("glissement à GAUCHE en série : retour à toutes les séries (le sens de « ← Séries »)", pg.evaluate("() => !LIB_SERIE"))
+            check("glissement à GAUCHE en série : série PRÉCÉDENTE (v3.5.6 ; « ← Séries » garde le retour)",
+                  pg.evaluate("() => LIB_SERIE") == (prec or "one-punch-man"), (prec, pg.evaluate("() => LIB_SERIE")))
         if tel:                                  # un titre trop long DEFILE (aller-retour), la barre reste dans l'ecran
             pg.evaluate("() => { localStorage.setItem('manga_serie','solo-levelng-ragnarok'); }"); pg.reload(); pg.wait_for_timeout(4000)
             d = pg.evaluate("() => [$('nfInfo').classList.contains('defile'), $('nfInfoTxt').scrollWidth > $('nfInfo').clientWidth - 20, Math.round($('navFlot').getBoundingClientRect().right) <= innerWidth]")
