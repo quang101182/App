@@ -63,6 +63,7 @@
 
 ## 3. Règles et pièges (ne pas les repayer)
 
+- **28/09 17h40 — MISE À JOUR** : files de captures TERMINÉES (12 galeries dans la secondaire), secondaire RELANCÉE (favoris actifs sur les 2 applications). **Prochaine priorité = ROADMAP S15 cause B** (lecteur page par page qui s'arrête avant la fin : 213/226 déclaré réussi). Le bloc « 17h10 » ci-dessous est périmé pour la file et la relance (faites).
 - **28/09 17h10 — ÉTAT À REPRENDRE** (app **v3.5.7**, manga-fetch **0.8.9**, ROADMAP S9 → S15) :
   - 🟠 **File de captures EN COURS dans la SECONDAIRE** : script `%TEMP%/file_eh4.py`, journal `%TEMP%/file_eh4.log` (une ligne « lancée » / « etat=… pages=N / attendu M » par galerie, « FILE TERMINEE » à la fin). Restent (dans l'ordre) : 4 galeries (noms dans le journal, jamais dans le dépôt). Une seule capture à la fois ; chaque onglet ouvert par le script est fermé par SON id.
   - 🟠 **Relancer la SECONDAIRE après la file** (favoris v3.5.7 : `patch_bibliotheque_favoris` appliqué au fichier, instance 8192 pas relancée) : `/manga/fetch_status` ≠ « en cours » ET `/manga/activite` vide → tuer le PID du port 8192 SEULEMENT s'il est `espace_prive.py` → `Start-ScheduledTask MangaStudioInstance2` → vérifier `GET /manga/bibliotheque` contient `favoris`.
