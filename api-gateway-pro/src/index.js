@@ -36,7 +36,14 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.25.2';
+const VERSION = '1.25.3';
+// v1.25.3 (2026-10-01) - API Polar : version EPINGLEE (en-tete Polar-Version).
+//   Polar versionne son API par trimestre depuis le 01/10/2026 ; sans en-tete, un appel suit la
+//   version courante et son contrat change sous nos pieds a chaque release. 2026-10 verifiee le
+//   29/09 sur nos 2 endpoints (subscriptions identique, license-keys = 2 champs ajoutes).
+//   ⚠️ Une version inconnue rend 404 (mesure 01/10) : toute montee de version se teste en prod.
+//   Prochaine revue : release de janvier 2027 (2026-10 supportee ~9 mois).
+const POLAR_VERSION = '2026-10';
 // v1.25.2 (2026-09-26) - /api/deepseek : modele verrouille cote serveur.
 //   Constat : le corps du client partait tel quel vers DeepSeek -> modele au choix (deepseek-v4-pro,
 //   ~6x le prix de flash), max_tokens libre, et la route est GRATUITE pour les cles sv_. Meme trou que
@@ -883,7 +890,7 @@ async function fetchPolarLicenseKey(env, licenseKeyId) {
   const token = await env.PRO_KV.get('cfg:polar_api_key');
   if (!token) { console.log('[polar] cfg:polar_api_key absent'); return null; }
   const res = await fetch(`https://api.polar.sh/v1/license-keys/${licenseKeyId}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, 'Polar-Version': POLAR_VERSION },
   });
   if (!res.ok) { console.log(`[polar] license-keys ${res.status}`); return null; }
   const b = await res.json().catch(() => null);
@@ -1441,7 +1448,7 @@ export default {
           if (!d || d.app !== 'swp' || d.source !== 'polar' || !d.subscriptionId) continue;
           const before = d.lsStatus || null;
           const res = await fetch(`https://api.polar.sh/v1/subscriptions/${d.subscriptionId}`, {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${token}`, 'Polar-Version': POLAR_VERSION },
           });
           if (res.status === 404) {
             // Abonnement introuvable chez Polar : cle orpheline. On le DIT, on ne
