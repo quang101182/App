@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.30.0"  # 1.30.0 (28/09, S17) : petits cris reconnus aussi sur le texte LU a la detection (bruitages anglais en mots, debris de lecture) ;  # 1.29.0 (28/09, S16) : page VERIFIEE = la liste de Quang fait loi -- une bulle apparue APRES sa validation (complement de la traduction) est EXCLUE, sauf si elle est une bulle qu'il a entouree ;  # 1.28.0 (27/09, S2-bis) : doublons laisses par <= 1.25.0 (bulle entouree autour d'une bulle traduite) repares a la preparation ;  # 1.27.0 (27/09, S4) : « qui parle » choisi par Quang a la verification des bulles = impose a l'IA et a la replique ;  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.31.0"  # 1.31.0 (01/10, Quang : « la video ne recupere pas l'animation case par case ») : video des Dialogues avec la CAMERA du lecteur (toutes les cases, glissement 0,7 s, cases muettes 1,2 s) -- dialogues_camera.py ; --sans-camera = ancien rendu (pages fixes), garde aussi en secours si les cases sont inconnues ;  # 1.30.0 (28/09, S17) : petits cris reconnus aussi sur le texte LU a la detection (bruitages anglais en mots, debris de lecture) ;  # 1.29.0 (28/09, S16) : page VERIFIEE = la liste de Quang fait loi -- une bulle apparue APRES sa validation (complement de la traduction) est EXCLUE, sauf si elle est une bulle qu'il a entouree ;  # 1.28.0 (27/09, S2-bis) : doublons laisses par <= 1.25.0 (bulle entouree autour d'une bulle traduite) repares a la preparation ;  # 1.27.0 (27/09, S4) : « qui parle » choisi par Quang a la verification des bulles = impose a l'IA et a la replique ;  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -1349,9 +1349,10 @@ def empreinte_video(doc, distrib, dd, portee=""):
     liste = [x for x in doc["repliques"] if x.get("lire") and x.get("voix") and dans_portee(x["page"], portee)
              and os.path.isfile(os.path.join(dd, "voix", x["voix"]["fichier"]))]
     # 1.14.0 : l'ecoute n'entre que si elle differe de 1 (les videos d'avant restent « a jour »)
+    # 1.31.0 : « camera-cases » -> les videos d'avant (pages fixes, sans animation) sont dites a refaire
     return liste, hashlib.sha1(json.dumps([[x["cle"], x["voix"]["empreinte"], x.get("texte"), couleur(x["qui"]), x["qui"]]
                                            + ([ecoute_de(distrib, x["qui"])] if ecoute_de(distrib, x["qui"]) != 1 else [])
-                                           for x in liste]).encode()).hexdigest()[:16]
+                                           for x in liste] + ["camera-cases"]).encode()).hexdigest()[:16]
 
 
 def etat_voix(doc, distrib, dd):
@@ -1563,6 +1564,10 @@ def cmd_video(a):
     os.makedirs(tmp, exist_ok=True)
     couleur = lambda q: (reglage_voix(distrib, q) or {}).get("couleur") or "#9aa6b8"
     t0 = time.time()
+    if not getattr(a, "sans_camera", False):                       # 1.31.0 : camera « case par case » (miroir du lecteur)
+        r = _video_camera(a, distrib, dd, vd, tmp, portee, liste, etapes, fich, chap_dir, couleur, t0)
+        if r is not None:
+            return r
     segs, imgs = [], []
     for k, x in enumerate(etapes):
         nc.progres("video", k, len(etapes))
@@ -1614,6 +1619,104 @@ def cmd_video(a):
             log("ECHEC ffmpeg (nvenc : %s) (x264 : %s)" % ((r.stderr or "")[-300:], (r2.stderr or "")[-300:]))
             raise RuntimeError("video : ffmpeg a echoue (voir le journal)")
     shutil.rmtree(tmp, ignore_errors=True)
+    return _enregistrer_video(a, distrib, dd, vd, portee, nom, liste, etapes, sortie, musique, piste, t0)
+
+
+def _video_camera(a, distrib, dd, vd, tmp, portee, liste, etapes, fich, chap_dir, couleur, t0):
+    """1.31.0 : la video avec la camera du lecteur. None = cases inconnues -> l'appelant fait l'ancien rendu."""
+    import shutil, subprocess
+    try:
+        import cases_video as cv
+        import dialogues_camera as dc
+        cases = cv.cases_chapitre(a.chap, journal=log)
+    except Exception as e:
+        log("  camera case par case impossible (%s) : video en pages fixes" % str(e)[:200])
+        return None
+    if not any(dc.page_cases(cases, fich, x["page"], x.get("file")) for x in etapes):
+        log("  aucune case connue sur ces pages : video en pages fixes")
+        return None
+    for x in etapes:                                     # l'image de chaque replique (la meme que l'ancien rendu)
+        if not x.get("vide"):
+            x["src"] = os.path.join(chap_dir, *(x.get("img_rel") or "traduction/fr/" + x["file"]).split("/"))
+    file = dc.file_cases(etapes, cases, fich)
+    nom_de = lambda x: "Narrateur" if x["qui"] == "narrateur" else x["qui"]
+    segs, durees = [], []
+    for k, x in enumerate(file):                         # le son d'abord : il fixe la duree de chaque etape
+        seg = os.path.join(tmp, "a%05d.m4a" % k)
+        if x.get("vide") or x.get("muette"):
+            du = dc.MUETTE if x.get("muette") else 2.2
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "%.3f" % du,
+                            "-c:a", "aac", "-b:a", "160k", seg], check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            durees.append(nc.duree_mp3(seg) or du)
+        else:
+            ec = ecoute_de(distrib, x["qui"])
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", os.path.join(dd, "voix", x["voix"]["fichier"]),
+                            "-af", ("atempo=%g," % ec if ec != 1 else "") + "apad=pad_dur=0.4",
+                            "-ar", "44100", "-ac", "2", "-c:a", "aac", "-b:a", "160k", seg], check=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            durees.append(nc.duree_mp3(seg) or ((x["voix"].get("duree") or 1.5) + 0.4))
+        segs.append(seg)
+    geos = {}
+
+    def geo_de(x):
+        f = x.get("src")
+        if not f or not os.path.isfile(f):
+            return None, ""
+        if f not in geos:
+            from PIL import Image
+            with Image.open(f) as im:
+                geos[f] = dc._place(im)
+        return geos[f], ("" if x.get("vide") or x.get("muette") else nom_de(x))
+
+    def prepare(x):
+        if x.get("muette"):
+            return dc.scene_page(x["src"])[0], dc.bande_texte("p. %d · case %d / %d · sans dialogue" % (x["page"], x["k"] + 1, x["nk"]))
+        if x.get("vide"):
+            return dc.scene_page(x["src"])[0], dc.bande_texte("page %d · sans dialogue" % x["page"])
+        return dc.scene_replique(x["src"], x, couleur(x["qui"]), nom_de(x))[0], dc.bande_replique(x, couleur(x["qui"]), nom_de(x))
+
+    fait = [0]
+
+    def progres(_i):
+        fait[0] += 1
+        nc.progres("video", fait[0], len(file))
+    nb_muettes = sum(1 for x in file if x.get("muette"))
+    log("  camera case par case : %d etape(s) dont %d case(s) sans dialogue" % (len(file), nb_muettes))
+    vids, _vues = dc.video_etapes(file, durees, geo_de, prepare, tmp, progres=progres)
+    with open(os.path.join(tmp, "a.txt"), "w", encoding="utf-8") as f:
+        f.writelines("file '%s'\n" % s_.replace("\\", "/") for s_ in segs)
+    with open(os.path.join(tmp, "v.txt"), "w", encoding="utf-8") as f:
+        f.writelines("file '%s'\n" % v_.replace("\\", "/") for v_ in vids)
+    nc.progres("video", len(file), len(file), etape_video="assemblage")
+    nom = "dialogues_p%s" % portee if portee else "dialogues"
+    sortie = os.path.join(vd, nom + ".mp4")
+    musique = json.loads(getattr(a, "musique", "") or "null") if getattr(a, "musique", "") else None
+    piste = None
+    if musique and musique.get("noms"):
+        try:
+            piste = piste_musique(musique, chemins(a.chap)[1], [(du, not (x.get("vide") or x.get("muette"))) for du, x in zip(durees, file)],
+                                  os.path.join(tmp, "musique.wav"))
+        except Exception as e:
+            log("  musique de fond impossible (%s) : video sans musique" % str(e)[:160])
+    cmd = ["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", os.path.join(tmp, "v.txt"),
+           "-f", "concat", "-safe", "0", "-i", os.path.join(tmp, "a.txt")]
+    if piste:
+        cmd += ["-i", piste, "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=first:normalize=0[a]", "-map", "0:v", "-map", "[a]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k"]
+    else:
+        cmd += ["-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "copy"]
+    r = subprocess.run(cmd + ["-shortest", "-movflags", "+faststart", sortie], capture_output=True, text=True, errors="replace",
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if r.returncode:
+        log("ECHEC ffmpeg (assemblage camera) : %s" % (r.stderr or "")[-400:])
+        raise RuntimeError("video : ffmpeg a echoue (voir le journal)")
+    shutil.rmtree(tmp, ignore_errors=True)
+    return _enregistrer_video(a, distrib, dd, vd, portee, nom, liste, etapes, sortie, musique, piste, t0)
+
+
+def _enregistrer_video(a, distrib, dd, vd, portee, nom, liste, etapes, sortie, musique, piste, t0):
+    """1.31.0 : la fin commune des deux rendus (camera / pages fixes) -- inchangee."""
+    doc = lire_json(os.path.join(dd, "dialogues.json"))
     emp = empreinte_video(doc, distrib, dd, portee)[1]
     doc = lire_json(os.path.join(dd, "dialogues.json"))
     vides = [x["page"] for x in etapes if x.get("vide")]
@@ -1650,6 +1753,7 @@ def main():
     pl = sp.add_parser("plan"); pl.add_argument("chap")
     vi = sp.add_parser("video"); vi.add_argument("chap"); vi.add_argument("--pages", default="", help="1.10.0 : la video de cette portee seulement")
     vi.add_argument("--musique", default="", help="1.24.0 : JSON {noms, volume} -- musique de fond de la serie")
+    vi.add_argument("--sans-camera", action="store_true", dest="sans_camera", help="1.31.0 : ancien rendu (pages fixes)")
     de = sp.add_parser("detecter"); de.add_argument("chap"); de.add_argument("--pages", default="")     # 1.19.0 (R30)
     to = sp.add_parser("tout"); to.add_argument("chap"); to.add_argument("--pages", default="")         # 1.21.0
     to.add_argument("--traduire", action="store_true"); to.add_argument("--sans-preparation", action="store_true", dest="sans_preparation")
