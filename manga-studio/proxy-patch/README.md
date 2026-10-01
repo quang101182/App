@@ -1,5 +1,12 @@
 # Ce que Manga Studio ajoute au proxy Generate Studio
 
+> 🗂 **Depuis le 01/10/2026, le serveur a un dépôt git LOCAL** (aucun remote, rien ne part en ligne) :
+> `C:\Users\quang\Documents\ComfyUI\.git`, liste BLANCHE dans son `.gitignore` (`_studio_llm_proxy.py`,
+> `_studio_db.py`, `fidelite.py`, lanceur, config du tunnel — jamais les fichiers de secret). Son historique reprend
+> les 231 anciennes copies `.bak` (21/06 → 29/09), rangées dans `MangaStudio-donnees/_archives/menage-2026-10-01/`.
+> ⇒ **Avant et après un patch : `git -C ~/Documents/ComfyUI commit -am "..."`**, plus de `cp … .bak`.
+> Les diffs ci-dessous restent la trace PUBLIQUE de ce que Manga Studio ajoute.
+
 ## Pourquoi ce dossier existe
 
 L'app est dans ce dépôt. **Ce dont elle dépend ne l'est pas.**
@@ -57,8 +64,7 @@ contiennent que des `+`, à l'exception de la ligne `SCHEMA_VERSION = 2` → `3`
 
 ```bash
 cd /c/Users/quang/Documents/ComfyUI
-cp _studio_db.py _studio_db.py.bak
-cp _studio_llm_proxy.py _studio_llm_proxy.py.bak
+git commit -qam "avant patch" || true          # depot local (01/10/2026) : remplace les cp .bak
 patch -p0 < .../proxy-patch/_studio_db.diff
 patch -p0 < .../proxy-patch/_studio_llm_proxy.diff
 python -c "import ast; ast.parse(open('_studio_db.py',encoding='utf-8').read())"
