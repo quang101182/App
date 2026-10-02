@@ -190,6 +190,30 @@
     /* P3b1 — DictoKey */
     .kpi-value { color: var(--ink); }
     .trend-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    /* v2.36.0 — Bandeau « moteur de transcription » : lu EN DIRECT (jamais depuis le cache), en tête de l'onglet. */
+    .stt-banner { border: 1px solid var(--line, rgba(127,127,127,.25)); border-left: 6px solid var(--stt-c, #64748b);
+      border-radius: var(--radius); padding: 14px 16px; margin-bottom: 18px; background: var(--surface, transparent); }
+    .stt-banner.stt-mai { --stt-c: var(--good); }
+    .stt-banner.stt-groq { --stt-c: #3b82f6; }
+    .stt-banner.stt-mixte { --stt-c: var(--warn); }
+    .stt-banner.stt-panne { --stt-c: var(--crit); }
+    .stt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 10px; }
+    .stt-title { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; opacity: .7; }
+    .stt-main { font-size: 20px; font-weight: 700; color: var(--stt-c); }
+    .stt-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+    .stt-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+      padding: 10px 12px; border-radius: var(--radius-sm); background: rgba(127,127,127,.08); }
+    .stt-plat { font-weight: 600; }
+    .stt-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+      font-size: 13px; font-weight: 600; color: #fff; background: var(--pill-c, #64748b); }
+    .stt-pill.p-mai { --pill-c: #15803d; } .stt-pill.p-groq { --pill-c: #2563eb; } .stt-pill.p-ko { --pill-c: #6b7280; }
+    .stt-meta { font-size: 12px; opacity: .75; width: 100%; }
+    .stt-meta.stt-err { color: var(--crit); opacity: 1; font-weight: 600; }
+    .stt-btn { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 8px; cursor: pointer;
+      border: 1px solid var(--stt-c, #64748b); background: transparent; color: inherit; }
+    .stt-btn:hover { background: rgba(127,127,127,.15); }
+    .stt-btn[disabled] { opacity: .5; cursor: wait; }
+    .stt-foot { font-size: 12px; opacity: .65; margin-top: 8px; }
     .trend-item { display: flex; align-items: baseline; gap: 8px; flex: 1 1 190px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
     .trend-label { color: var(--ink-faint); font-size: .68rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
     .trend-val { margin-left: auto; font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -564,7 +588,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.35.4-reels-octobre';
+    const VERSION = 'v2.36.0-moteur-stt';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -2109,7 +2133,7 @@
 
       const note = `<div class="acq-when">Passerelle ${safeText(data.version || '?')} · usage compté côté serveur depuis la v0.4.0 (avant, la dictée PC passait par la passerelle Android et n'était comptée nulle part).</div>`;
 
-      return (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
+      return sttPlaceholder() + (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
         + `<section class="section"><div class="section-head"><h2>💶 Revenu &amp; abonnements</h2></div>${money}</section>`
         + `<section class="section"><div class="section-head"><h2>Usage réel · 30 jours</h2></div>${usageHtml}</section>`
         + `<section class="section"><div class="section-head"><h2>Activité par jour</h2></div>${serieHtml}</section>`
@@ -2166,6 +2190,83 @@
     }
 
     // === P3b1 — Vue DictoKey : Overview + Play Store + Infra (devices/charts/Firebase/advanced = lots suivants) ===
+    // ── v2.36.0 — Moteur de transcription (Android + PC) ─────────────────────────────────────
+    // Lu EN DIRECT à chaque affichage (jamais depuis le cache persisté : un moteur périmé à l'écran
+    // serait pire que rien). La bascule est un geste humain confirmé — la passerelle n'a AUCUN secours
+    // automatique (décision du 03/10, « option 1 »).
+    const DKPC_GATEWAY = 'https://api-gateway-dictokey-pc.quang101182.workers.dev';
+    const STT_SOURCES = [
+      { plat: 'android', nom: 'Android', base: DK_GATEWAY, app: 'dk' },
+      { plat: 'pc', nom: 'PC', base: DKPC_GATEWAY, app: 'dkpc' },
+    ];
+    const STT_LABEL = { mai2: 'MAI-Transcribe-2', groq: 'Groq Whisper' };
+    const sttHeure = iso => { try { return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch { return iso; } };
+
+    function sttPlaceholder() {
+      setTimeout(dkSttLoad, 0);
+      return `<div id="dk-stt-banner" class="stt-banner"><div class="stt-head"><span class="stt-title">Moteur de transcription</span><span class="stt-main">lecture en direct…</span></div></div>`;
+    }
+
+    async function dkSttLoad() {
+      const el = document.getElementById('dk-stt-banner');
+      if (!el) return;
+      const etats = await Promise.all(STT_SOURCES.map(async s => {
+        const tok = getToken(getApp(s.app));
+        if (!tok) return { ...s, erreur: 'jeton absent' };
+        try {
+          const r = await fetch(`${s.base}/admin/stt-engine`, { headers: { Authorization: `Bearer ${tok}` }, cache: 'no-store' });
+          if (!r.ok) return { ...s, erreur: `HTTP ${r.status}` };
+          return { ...s, etat: await r.json() };
+        } catch (e) { return { ...s, erreur: e.message || 'réseau' }; }
+      }));
+      const el2 = document.getElementById('dk-stt-banner');
+      if (el2) el2.outerHTML = sttRender(etats);
+    }
+
+    function sttRender(etats) {
+      const ok = etats.filter(e => e.etat);
+      const moteurs = [...new Set(ok.map(e => e.etat.engine))];
+      const pannes = ok.reduce((n, e) => n + (e.etat.errors_today || 0), 0);
+      let cls, titre;
+      if (pannes > 0) { cls = 'stt-panne'; titre = `⚠ ${pannes} panne${pannes > 1 ? 's' : ''} MAI aujourd'hui`; }
+      else if (moteurs.length > 1) { cls = 'stt-mixte'; titre = 'Moteurs différents selon la plateforme'; }
+      else if (moteurs[0] === 'mai2') { cls = 'stt-mai'; titre = '● MAI-Transcribe-2'; }
+      else if (moteurs[0] === 'groq') { cls = 'stt-groq'; titre = '● Groq Whisper'; }
+      else { cls = ''; titre = 'État illisible'; }
+      const lignes = etats.map(e => {
+        if (!e.etat) return `<div class="stt-row"><span class="stt-plat">${safeText(e.nom)}</span><span class="stt-pill p-ko">indisponible</span><span class="stt-meta stt-err">${safeText(e.erreur)}</span></div>`;
+        const s = e.etat, autre = s.engine === 'mai2' ? 'groq' : 'mai2';
+        const meta = [];
+        if (s.changed && s.changed.at) meta.push(`basculé le ${sttHeure(s.changed.at)} (${STT_LABEL[s.changed.from] || s.changed.from} → ${STT_LABEL[s.changed.to] || s.changed.to})`);
+        meta.push(`pannes : ${s.errors_today || 0} aujourd'hui · ${s.errors_yesterday || 0} hier`);
+        const err = s.last_error ? `<span class="stt-meta${(s.errors_today || 0) > 0 ? ' stt-err' : ''}">dernière erreur ${sttHeure(s.last_error.ts)} — ${safeText(String(s.last_error.status))} ${safeText(s.last_error.message || '')}</span>` : '';
+        return `<div class="stt-row"><span class="stt-plat">${safeText(e.nom)}</span>`
+          + `<span class="stt-pill ${s.engine === 'mai2' ? 'p-mai' : 'p-groq'}">${safeText(STT_LABEL[s.engine])}</span>`
+          + `<button type="button" class="stt-btn" data-stt-plat="${e.plat}" data-stt-switch="${autre}">Passer sur ${safeText(STT_LABEL[autre])}</button>`
+          + `<span class="stt-meta">${safeText(meta.join(' · '))}</span>${err}</div>`;
+      }).join('');
+      return `<div id="dk-stt-banner" class="stt-banner ${cls}"><div class="stt-head"><span class="stt-title">Moteur de transcription</span><span class="stt-main">${safeText(titre)}</span></div>`
+        + `<div class="stt-rows">${lignes}</div>`
+        + `<div class="stt-foot">Lu en direct · aucun secours automatique : en cas de panne, la dictée échoue et c'est ce bouton qui bascule. Restent toujours sur Groq : croate, serbe, lao, et les audios partagés hors WAV/MP3/FLAC.</div></div>`;
+    }
+
+    async function dkSttSwitch(plat, cible) {
+      const src = STT_SOURCES.find(s => s.plat === plat);
+      if (!src || !STT_LABEL[cible]) return;
+      if (!confirm(`Basculer DictoKey ${src.nom} sur ${STT_LABEL[cible]} ?\n\nEffet en moins d'une minute, pour tous les utilisateurs ${src.nom}.`)) return;
+      document.querySelectorAll('#dk-stt-banner .stt-btn').forEach(b => { b.disabled = true; });
+      try {
+        const r = await fetch(`${src.base}/admin/stt-engine`, {
+          method: 'POST', cache: 'no-store',
+          headers: { Authorization: `Bearer ${getToken(getApp(src.app))}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ engine: cible, source: 'dashboard' }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.ok || j.engine !== cible) alert(`Échec de la bascule ${src.nom} : ${j.error || 'HTTP ' + r.status}`);
+      } catch (e) { alert(`Échec de la bascule ${src.nom} : ${e.message}`); }
+      await dkSttLoad();   // relecture réelle : on affiche ce que la passerelle DIT, pas ce qu'on a demandé
+    }
+
     function renderDkView(payload) {
       if (!payload || !payload.mon) return EmptyState('DictoKey', 'Aucune donnée reçue du gateway.');
       const { mon, stats, dev, visit, click, play, fb } = payload;
@@ -2308,7 +2409,7 @@
       const donuts = `<div class="donut-grid"><div><div class="chart-title">Langues dictées</div><div class="chart-box donut"><canvas id="dk-chart-lang"></canvas></div></div>`
         + `<div><div class="chart-title">Top pays actifs</div><div class="chart-box donut"><canvas id="dk-chart-country"></canvas></div></div></div>`;
 
-      return trend + silent
+      return sttPlaceholder() + trend + silent
         + `<section class="section">${kpis}</section>`
         + `<section class="section">${Panel('dk-site', '🌐 Funnel site → Play Store', siteFunnel, true)}</section>`
         + `<section class="section">${Panel('dk-play', '📥 Play Store — adoption & activité', psHtml, true)}</section>`
@@ -3016,6 +3117,8 @@
       if (routeButton) { route(routeButton.dataset.route); return; }
       const refreshButton = event.target.closest('[data-refresh]');
       if (refreshButton) { refresh(refreshButton.dataset.refresh); return; }
+      const sttButton = event.target.closest('[data-stt-switch]');   // v2.36.0
+      if (sttButton) { dkSttSwitch(sttButton.dataset.sttPlat, sttButton.dataset.sttSwitch); return; }
       // P3b2b — détail par appareil (délégation ; les clics DANS un panneau ouvert sont ignorés)
       if (event.target.closest('#dk-expand-all')) { dkExpandAllVisible(); return; }
       if (event.target.closest('#dk-collapse-all')) { dkCloseAllDevices(); return; }
