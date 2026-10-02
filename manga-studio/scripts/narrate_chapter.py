@@ -29,7 +29,7 @@ import moderation as mod             # v2.6.0 : refus reconnus, alertes persista
 import depenses as dep               # v2.6.0 : registre des depenses en ajout seul
 from datetime import datetime
 
-VERSION = "2.13.0"  # 2.13.0 (28/09, S16) : Gemini qui refuse EN TOUTES LETTRES = Refus (relais), plus « JSON illisible » ;
+VERSION = "2.14.0"  # 2.14.0 (02/10) : un relais (Kimi / Pixtral) a renvoye « faits » en LISTE -> plantage dans latiniser APRES l'analyse payee, et vision.json n'etait ecrit qu'APRES latiniser : 0,61 $ perdus. Les champs texte sont ramenes au bon type (_txt) et vision.json est ecrit AVANT toute etape qui peut echouer ;  # 2.13.0 (28/09, S16) : Gemini qui refuse EN TOUTES LETTRES = Refus (relais), plus « JSON illisible » ;
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -535,6 +535,31 @@ RELAIS = False          # v2.10.0 : relais auto de moderation (reglages, lu dans
 RELAIS_CHAINE = {"gemini": ["kimi", "pixtral"], "kimi": ["gemini", "pixtral"], "pixtral": ["gemini", "kimi"]}
 
 
+def _txt(v):
+    """2.14.0 : un modele (un relais surtout) renvoie parfois une LISTE ou un objet la ou on attend un texte."""
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v
+    if isinstance(v, (list, tuple)):
+        return " ".join(t for t in (_txt(x) for x in v) if t).strip()
+    if isinstance(v, dict):
+        return " ".join(t for t in (_txt(x) for x in v.values()) if t).strip()
+    return str(v)
+
+
+def normaliser_vis(vis):
+    """2.14.0 : faits / narration = textes, presents = liste de textes -- pour TOUTE analyse (neuve ou reprise)."""
+    for p in vis:
+        p["faits"] = _txt(p.get("faits"))
+        if "narration" in p:
+            p["narration"] = _txt(p.get("narration"))
+        if "presents" in p:
+            pr = p.get("presents")
+            p["presents"] = [t for t in (_txt(x) for x in pr) if t] if isinstance(pr, (list, tuple)) else ([_txt(pr)] if pr else [])
+    return vis
+
+
 def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
     path, model = ENGINES[engine]
     relais_pour = {}        # v2.10.0 : page -> moteur de relais (la page refusee revient en tete de file, MEME contexte)
@@ -658,7 +683,7 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
             if p["num"] not in recus:
                 journal_fiche.append({"lot": nums, "page_absente": p["num"]})
             sortie.append({"page": p["num"], "file": p["file"], "type": x.get("type", "histoire"),
-                           "faits": x.get("faits", ""), "presents": x.get("presents") or [], "narration": ""})
+                           "faits": _txt(x.get("faits", "")), "presents": x.get("presents") or [], "narration": ""})
             if p["num"] in refus:                                               # v2.11.0 : trace du relais reussi
                 sortie[-1]["trace"] = {"refuse_par": refus[p["num"]], "lu_par": eng, "comment": "relais automatique",
                                        "t": maintenant()}
@@ -1437,7 +1462,11 @@ def main():
                          ensure_ascii=False))
         raise SystemExit(3)
 
+    vis, resume = normaliser_vis(vis), _txt(resume)                       # 2.14.0
     titre = ""
+    if not a.reuse_vision:              # 2.14.0 : l'analyse payee est gardee AVANT toute etape qui peut echouer
+        with open(os.path.join(outdir, "vision.json"), "w", encoding="utf-8") as f:
+            json.dump(_resultat(vis), f, ensure_ascii=False, indent=1)
     if a.prompt == "v2":                # v2.3.0 : alphabet latin AVANT le recit (fiche, faits, presents, resume)
         vis, resume, persos, noms, _ = latiniser(vis, resume, persos, noms, man.get("title"), stats)
         if stats.get("noms") is not None:
