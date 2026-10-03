@@ -43,8 +43,12 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { APPS_STT, MAI_CLES, appDemandee, lireMoteur, etatMoteur, basculer, noterPanne, alerterPanne, cibleMai }
+  from './stt_moteur.js';   // v1.64 : interrupteur de moteur de transcription par app + relais MAI
+
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.63';   // 1.63 (27/09) : retrait de la route DELETE ElevenLabs de la 1.62 -- inutile (voix de la bibliotheque utilisables sans ajout)
+const VERSION = '1.64';   // 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
+//    // 1.63 (27/09) : retrait de la route DELETE ElevenLabs de la 1.62 -- inutile (voix de la bibliotheque utilisables sans ajout)
 // v1.59 (21/09/2026) — runSoldeWatch : sondes de SOLDE pour deepseek, moonshot-kimi, runpod, piapi
 // (les 4 fournisseurs rechargeables, jusque-la angles morts du cost watch). Voir la fonction.
 
@@ -93,7 +97,7 @@ function isAdDomain(hostname) {
 }
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'MISTRAL_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'MOONSHOT_KEY', 'OPENROUTER_KEY', 'GLM_KEY', 'ELEVENLABS_KEY', 'GCPTTS_KEY', 'FAL_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS', 'STUDIO_SECRET'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'MISTRAL_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'MOONSHOT_KEY', 'OPENROUTER_KEY', 'GLM_KEY', 'ELEVENLABS_KEY', 'GCPTTS_KEY', 'FAL_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS', 'STUDIO_SECRET', 'AZURE_SPEECH_KEY', 'AZURE_SPEECH_KEY_SOUSTITRES'];
 // GCPTTS_KEY = clé Google Cloud DÉDIÉE à l'API Cloud Text-to-Speech (texttospeech.googleapis.com), voix Chirp 3 HD = mêmes voix que Gemini sans cap journalier. Ajoutée 15/06/2026 pour StoryVoice.
 
 /** Rate limit: max requests per minute window */
@@ -102,6 +106,9 @@ const RL_API_MAX   = 20;
 // personnages d'un chapitre de 49 pages (~150 appels Gemini, deja authentifies) prenait 17 min. Les autres apps
 // (DictoKey & co) gardent le compteur commun et ses 20/min, inchanges. Le client se freine lui-meme a 54/min.
 const RL_MANGA_MAX = 60;
+// v1.64 (03/10/2026) : MAI-Transcribe-2 rend une tranche de 6 min en ~2 s : un lot de Telegramme Video
+// depasserait les 20/min communs, ce que Gemini (11 s/tranche) n'atteignait jamais. Compteur propre.
+const RL_MAI_MAX   = 60;
 const RL_ADMIN_MAX = 10;
 const RL_TTL_SEC   = 70; // KV TTL for rate-limit counters (slightly longer than 60s window)
 
@@ -268,6 +275,31 @@ async function handleFetch(request, env, ctx) {
         return await proxyElevenlabs(request, env, path);
       }
 
+      // ── v1.64 : moteur de transcription en vigueur pour une app (lu par SubWhisper / Telegramme Video) ──
+      if (method === 'GET' && path === '/api/stt-engine') {
+        const authErr = await checkBearer(request, wsSecrets(env), 'WORKER_SECRET', env);
+        if (authErr) return authErr;
+        const app = appDemandee(url);
+        if (!app) return jsonResponse({ error: 'app inconnue', apps: Object.keys(APPS_STT) }, 400);
+        return jsonResponse(await lireMoteur(env.GATEWAY_KV, app), 200, { 'Cache-Control': 'no-store' });
+      }
+
+      // ── v1.64 : interrupteur pilote depuis le dashboard (GET = etat, POST = bascule). Le bloc admin
+      //    plus bas est POST-only : le GET de lecture doit passer ici. Auth ADMIN_TOKEN comme tout /admin/. ──
+      if ((method === 'GET' || method === 'POST') && path === '/admin/stt-engine') {
+        const authErr = await checkBearer(request, env.ADMIN_TOKEN, 'ADMIN_TOKEN');
+        if (authErr) return authErr;
+        const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+        const rlErr = await checkRateLimit(env, ctx, 'adm', ip, RL_ADMIN_MAX);
+        if (rlErr) return rlErr;
+        const app = appDemandee(url);
+        if (!app) return jsonResponse({ error: 'app inconnue', apps: Object.keys(APPS_STT) }, 400);
+        if (method === 'GET') return jsonResponse({ ok: true, ...(await etatMoteur(env.GATEWAY_KV, app)) }, 200, { 'Cache-Control': 'no-store' });
+        let corps = null; try { corps = await request.json(); } catch { /* corps invalide -> 400 plus bas */ }
+        const r = await basculer(env.GATEWAY_KV, app, corps);
+        return jsonResponse(r.body, r.status);
+      }
+
       // ── LTX heartbeat (auth WORKER_SECRET, PAS de rate limit) ───────────────
       // Le proxy local poste ici toutes les 30s tant qu'il gère un pod ltx-gs. Tant que ce
       // heartbeat est frais, le cron scheduled() ne coupe PAS (session active). Hors rate limit
@@ -287,7 +319,9 @@ async function handleFetch(request, env, ctx) {
         // Rate limit (fire-and-forget counter update)
         const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
         const manga = (request.headers.get('User-Agent') || '').startsWith('manga-studio/');     // v1.60
-        const rlErr = await checkRateLimit(env, ctx, manga ? 'mgs' : 'api', ip, manga ? RL_MANGA_MAX : RL_API_MAX);
+        const mai   = path === '/api/mai';                                                         // v1.64
+        const rlErr = await checkRateLimit(env, ctx, mai ? 'mai' : (manga ? 'mgs' : 'api'), ip,
+                                           mai ? RL_MAI_MAX : (manga ? RL_MANGA_MAX : RL_API_MAX));
         if (rlErr) return rlErr;
 
         // Dispatch to the right upstream
@@ -305,6 +339,7 @@ async function handleFetch(request, env, ctx) {
         if (path === '/api/openrouter')       return await proxyOpenRouter(request, env);
         if (path === '/api/glm')              return await proxyGLM(request, env);
         if (path === '/api/azure')            return await proxyAzure(request, env, url);
+        if (path === '/api/mai')              return await proxyMai(request, env, ctx);
         if (path.startsWith('/api/claude'))   return await proxyClaude(request, env, path);
         if (path.startsWith('/api/deepgram')) return await proxyDeepgram(request, env, path);
         if (path.startsWith('/api/elevenlabs')) return await proxyElevenlabs(request, env, path);
@@ -717,6 +752,39 @@ async function proxyAzure(request, env, parsedUrl) {
   if (region) authHeaders['Ocp-Apim-Subscription-Region'] = region;
 
   return proxyRequest(request, upstream, authHeaders);
+}
+
+/**
+ * v1.64 — POST /api/mai → Azure Speech Fast Transcription, modele MAI-Transcribe-2.
+ *
+ * Corps multipart (`audio` + `definition`) relaye TEL QUEL : c'est l'app qui demande
+ * `enhancedMode.modelOptions.timestamps = "word"` (sans lui MAI rend UNE phrase sans aucun timing).
+ * En-tete optionnel `X-Stt-App` (defaut `soustitrage`) : a qui imputer une panne.
+ * Panne (HTTP non 2xx ou reseau) : compteur + derniere erreur + alerte Telegram <= 1/h avec le lien du
+ * dashboard. AUCUNE bascule automatique (decision Quang 03/10, comme DictoKey) : l'app recoit l'erreur.
+ */
+async function proxyMai(request, env, ctx) {
+  let apiKey = null;
+  for (const nom of MAI_CLES) { apiKey = await resolveKey(env, nom); if (apiKey) break; }
+  if (!apiKey) return jsonResponse({ error: 'AZURE_SPEECH_KEY not configured' }, 503);
+  const app = APPS_STT[(request.headers.get('X-Stt-App') || '').toLowerCase()] ? request.headers.get('X-Stt-App').toLowerCase() : 'soustitrage';
+  const upstream = await cibleMai(env.GATEWAY_KV);
+  const panne = async (status, message) => {
+    await noterPanne(env.GATEWAY_KV, app, status, message);
+    await alerterPanne(env.GATEWAY_KV, app, `HTTP ${status} ${message}`, (t) => costWatchTelegram(env, t));
+  };
+  let res;
+  try {
+    res = await proxyRequest(request, upstream, { 'Ocp-Apim-Subscription-Key': apiKey });
+  } catch (e) {
+    ctx.waitUntil(panne(0, String(e && e.message || e)));
+    return jsonResponse({ error: 'stt_indisponible', detail: 'MAI injoignable' }, 502);
+  }
+  if (!res.ok) {
+    const copie = res.clone();
+    ctx.waitUntil(copie.text().catch(() => '').then((t) => panne(res.status, t.slice(0, 200))));
+  }
+  return res;
 }
 
 /**

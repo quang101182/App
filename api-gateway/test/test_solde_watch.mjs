@@ -9,7 +9,7 @@
  *
  *   node test/test_solde_watch.mjs
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -157,6 +157,7 @@ try {
   dossierH = mkdtempSync(join(tmpdir(), 'banc-solde-h-'));
   const fichier = join(dossierH, 'index_mute_h.mjs');
   writeFileSync(fichier, source.replace(cible, 'if (last === auj) return out;'));
+  copyFileSync(join(ICI, '../src/stt_moteur.js'), join(dossierH, 'stt_moteur.js'));   // v1.64 : index.js importe ce module
   const mute = (await import(pathToFileURL(fichier).href)).default;
   const r = await scenarioIntraday(mute);
   const ok = !r[0][1];
@@ -178,6 +179,7 @@ try {
   dossier = mkdtempSync(join(tmpdir(), 'banc-solde-'));
   const fichier = join(dossier, 'index_mute.mjs');
   writeFileSync(fichier, source.replace(cible, '    out[ap] = Math.round(baisse * 1e6) / 1e6;'));
+  copyFileSync(join(ICI, '../src/stt_moteur.js'), join(dossier, 'stt_moteur.js'));    // v1.64 : index.js importe ce module
   const mute = (await import(pathToFileURL(fichier).href)).default;
   const rouges = (await batterie(mute)).filter(([, ok]) => !ok).map(([nom]) => nom);
   const attendu = 'moonshot brule 2 $ (20x) malgre 3 recharges passees -> [anomalie] moonshot';
