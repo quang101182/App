@@ -32,7 +32,7 @@ with sync_playwright() as p:
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.goto("http://127.0.0.1:%d/manga#k=" % PORT + KEY); pg.wait_for_timeout(3500)
-        check("version 3.6.3 servie", pg.evaluate("() => VERSION") == "3.6.3", pg.evaluate("() => VERSION"))
+        check("version >= 3.6.3 servie", tuple(map(int, pg.evaluate("() => VERSION").split("."))) >= (3, 6, 3), pg.evaluate("() => VERSION"))
         injecte = ("c => { clearTimeout(ACT.timer); ACT.items = [c]; ACT.vague = { debut: Date.now() - 3600e3, faits: 0, lotFaits: 0,"
                    " durees: {} }; ACT.maj = Date.now() - 125 * 60e3; ACT.panne = 0; actRendre(); }")
         # --- 1. reel

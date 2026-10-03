@@ -18,9 +18,10 @@ import importlib.util
 import json
 import os
 import sys
+import threading
 from http.server import ThreadingHTTPServer
 
-VERSION = "1.6.0"
+VERSION = "1.7.0"   # v1.7.0 (03/10) : son propre veilleur d avis de fin (textes neutres : MANGA_ESPACE=prive)
 COMFY = os.path.expanduser(r"~\Documents\ComfyUI")
 PROXY = os.path.join(COMFY, "_studio_llm_proxy.py")
 DONNEES = os.environ.get("MANGA_SOURCES_DIR") or os.path.expanduser(r"~\Documents\MangaStudio-donnees\prive")
@@ -105,6 +106,8 @@ class H(mod.H):
         return mod.H._authorized(self) or jeton_access_valide(self.headers.get("Cf-Access-Jwt-Assertion") or "")
 
 
+# v1.7.0 : le veilleur des avis de fin (l'import du proxy ne lance aucun fil : il faut le demarrer ici)
+threading.Thread(target=mod.manga_avis_veilleur, daemon=True).start()
 print("espace prive v%s -> http://127.0.0.1:%d/manga/ (PID %d) -- gestionnaire HTTP seul" % (VERSION, PORT, os.getpid()),
       flush=True)
 ThreadingHTTPServer.request_queue_size = 128

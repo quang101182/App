@@ -1,4 +1,6 @@
-// Manga Studio — service worker v2.7.0
+// Manga Studio — service worker v2.8.0
+// v2.8.0 (03/10/2026) : AVIS DE FIN -- affiche les notifications poussees par le serveur (manga_avis.py) et rouvre l'app au toucher.
+// Le texte vient du serveur : titres dans la principale, AUCUN dans la secondaire (decide cote serveur, rien a filtrer ici).
 // v2.7.0 : le chemin direct Wi-Fi (manga-wifi.crushrank.xyz:8723) CONTOURNE le worker par une regle de routage
 // posee a l'installation : sinon Chrome n'affiche pas l'invite « reseau local » et la requete echoue en silence
 // (recette Telegramme Video, 13/09/2026). Service worker v2.4.6 (etape 10 : ecouter PC eteint, decision Quang 22/09 : DANS le telephone).
@@ -70,4 +72,22 @@ self.addEventListener("fetch", e => {
   if (req.mode === "navigate" && (u.pathname === "/manga/" || u.pathname === "/manga")) return e.respondWith(page(req));
   if (COQUILLE.test(u.pathname)) return e.respondWith(reseauSinonHL(req, true));
   if (LECTEUR.test(u.pathname)) return e.respondWith(reseauSinonHL(req, false));
+});
+
+// v2.8.0 : avis de fin (Web Push). Un message illisible affiche quand meme quelque chose : Chrome exige une notification
+// visible pour chaque push recu (userVisibleOnly), sinon il finit par retirer l'abonnement.
+self.addEventListener("push", e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (x) { d = { corps: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.titre || "Manga Studio", {
+    body: d.corps || "", icon: "/manga/icon-192.png", badge: "/manga/icon-192.png",
+    tag: d.id || undefined, data: { cible: d.cible || "/manga/" } }));
+});
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const cible = new URL((e.notification.data && e.notification.data.cible) || "/manga/", self.location.origin).href;
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(cs => {
+    const ouvert = cs.find(c => new URL(c.url).pathname.startsWith("/manga"));
+    return ouvert ? ouvert.focus() : self.clients.openWindow(cible);
+  }));
 });
