@@ -105,6 +105,22 @@ async function batterie(worker) {
   r = await appel('POST', '/admin/keys/get', { auth: dash, body: JSON.stringify({ name: 'AZURE_SPEECH_KEY' }) });
   ok('jeton dashboard REFUSE sur /admin/keys/get (401)', r.status === 401 && !r.texte.includes('FAUSSE-CLE-AZURE'));
 
+  // ── v1.68 : Jarvis, menu restreint MAI / Groq, defaut Groq
+  r = await appel('GET', '/api/stt-engine?app=jarvis', { auth: ws });
+  ok('jarvis : defaut = groq (rien ne change au deploiement)', r.status === 200 && r.json.engine === 'groq');
+  r = await appel('GET', '/admin/stt-engine?app=jarvis', { auth: dash });
+  ok('jarvis : menu de 2 moteurs (mai2, groq)', r.status === 200 && r.json.moteurs.map((m) => m.id).join() === 'mai2,groq');
+  r = await appel('POST', '/admin/stt-engine?app=jarvis', { auth: dash, body: JSON.stringify({ engine: 'croise' }) });
+  ok('jarvis : moteur hors menu refuse (400), rien ecrit', r.status === 400 && !env.GATEWAY_KV.store.has('cfg:stt_engine:jarvis'));
+  env.GATEWAY_KV.store.set('cfg:stt_engine:jarvis', 'gemini');
+  r = await appel('GET', '/api/stt-engine?app=jarvis', { auth: ws });
+  ok('jarvis : valeur KV hors menu -> defaut groq', r.json.engine === 'groq');
+  env.GATEWAY_KV.store.delete('cfg:stt_engine:jarvis');
+  r = await appel('POST', '/admin/stt-engine?app=jarvis', { auth: dash, body: JSON.stringify({ engine: 'mai2', source: 'banc' }) });
+  ok('jarvis : bascule groq -> mai2', r.status === 200 && r.json.engine === 'mai2' && r.json.changed_from === 'groq');
+  r = await appel('GET', '/api/stt-engine?app=soustitrage', { auth: ws });
+  ok('jarvis n a PAS touche au sous-titrage', r.json.engine === 'mai2');
+
   // ── relais MAI : succes
   const corps = new FormData(); corps.append('definition', '{}'); corps.append('audio', new Blob([new Uint8Array(10)]), 'a.wav');
   r = await appel('POST', '/api/mai', { auth: ws, body: corps });
@@ -116,6 +132,11 @@ async function batterie(worker) {
      && env.GATEWAY_KV.store.get(`stt:sec:soustitrage:${jour().slice(0, 7)}`) === '360.0');
   ok('compteur de debit PROPRE a /api/mai', [...env.GATEWAY_KV.store.keys()].some((k) => k.startsWith('rl:mai:')));
 
+  // v1.68 : X-Stt-App: jarvis -> secondes imputees a jarvis, pas au sous-titrage
+  r = await appel('POST', '/api/mai', { auth: ws, body: corps, headers: { 'X-Stt-App': 'jarvis' } });
+  ok('jarvis : secondes comptees a part', env.GATEWAY_KV.store.get(`stt:sec:jarvis:${jour()}`) === '360.0'
+     && env.GATEWAY_KV.store.get(`stt:sec:soustitrage:${jour()}`) === '360.0');
+
   // ── v1.66 (P5.4) : un 400 = la requete, PAS une panne -> ni compteur ni alerte
   scenario.azure = 400;
   r = await appel('POST', '/api/mai', { auth: ws, body: corps });
@@ -125,7 +146,7 @@ async function batterie(worker) {
   // ── relais MAI : panne
   scenario.azure = 500;
   r = await appel('POST', '/api/mai', { auth: ws, body: corps });
-  ok('panne : erreur relayee (pas de bascule)', r.status === 500 && journal.azure.length === 3);
+  ok('panne : erreur relayee (pas de bascule)', r.status === 500 && journal.azure.length === 4);
   ok('panne : compteur 1 + derniere erreur', env.GATEWAY_KV.store.get(`stt:err:soustitrage:${jour()}`) === '1'
      && JSON.parse(env.GATEWAY_KV.store.get('stt:last_error:soustitrage')).status === 500);
   ok('panne : 1 alerte Telegram avec le lien du dashboard', journal.tg.length === 1 && journal.tg[0].includes('dash.se7enai.com'));
@@ -184,7 +205,9 @@ async function mutation(titre, fichierSrc, cible, remplacement, attendu) {
 await mutation('drapeau d\'alerte pose meme si Telegram refuse', 'stt_moteur.js',
   'if (r && r.sent) await kv.put(k', 'await kv.put(k', 'Telegram refuse -> drapeau non pose -> la panne suivante realerte');
 await mutation('moteur non valide a la bascule', 'stt_moteur.js',
-  'if (!Object.prototype.hasOwnProperty.call(MOTEURS, cible)) {', 'if (false) {', 'moteur inconnu refuse (400) et rien n\'est ecrit');
+  'if (!moteursDe(app).includes(cible)) {', 'if (false) {', 'moteur inconnu refuse (400) et rien n\'est ecrit');
+await mutation('menu jarvis non restreint', 'stt_moteur.js',
+  "moteurs: ['mai2', 'groq'],", 'moteurs: undefined,', 'jarvis : menu de 2 moteurs (mai2, groq)');
 await mutation('/api/mai sur le compteur commun', 'index.js',
   "mai ? 'mai' : (manga ? 'mgs' : 'api')", "(manga ? 'mgs' : 'api')", 'compteur de debit PROPRE a /api/mai');
 await mutation('jeton du dashboard accepte sur tout /admin/', 'index.js',

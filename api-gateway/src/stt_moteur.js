@@ -29,7 +29,21 @@ export const APPS_STT = {
     defaut: 'croise',
     lien: 'https://dash.se7enai.com/#st',
   },
+  // v1.68 (03/10) : Jarvis (assistant vocal, PC + smartphone). Menu RESTREINT : ses phrases sont courtes
+  // et en WAV après conversion, seuls MAI et Groq ont du sens. Défaut Groq = comportement d'avant.
+  jarvis: {
+    nom: 'Jarvis (assistant vocal, PC + smartphone)',
+    defaut: 'groq',
+    lien: 'https://dash.se7enai.com/#st',
+    moteurs: ['mai2', 'groq'],
+  },
 };
+
+/** Moteurs autorisés pour une app (toutes si l'app ne restreint pas son menu). */
+export function moteursDe(app) {
+  const liste = APPS_STT[app].moteurs;
+  return liste ? liste.filter((id) => Object.prototype.hasOwnProperty.call(MOTEURS, id)) : Object.keys(MOTEURS);
+}
 
 /** Ressource Azure Foundry (northeurope) — pas un secret ; surchargeable par cfg:mai_endpoint. */
 export const MAI_ENDPOINT_DEFAUT = 'https://dictokey-stt-bench.cognitiveservices.azure.com';
@@ -48,7 +62,7 @@ export function appDemandee(url, defaut = 'soustitrage') {
 /** Moteur réellement en vigueur (valeur KV inconnue ou absente -> défaut de l'app). */
 export async function moteurDe(kv, app) {
   const brut = await kv.get(`cfg:stt_engine:${app}`);
-  return Object.prototype.hasOwnProperty.call(MOTEURS, brut) ? brut : APPS_STT[app].defaut;
+  return moteursDe(app).includes(brut) ? brut : APPS_STT[app].defaut;
 }
 
 /** Ce que lisent les apps (GET /api/stt-engine) : le strict nécessaire. */
@@ -65,23 +79,24 @@ export async function etatMoteur(kv, app) {
     kv.get(`stt:last_error:${app}`, 'json'), kv.get(`stt:err:${app}:${jourIso()}`), kv.get(`stt:err:${app}:${jourIso(1)}`),
     kv.get(`stt:sec:${app}:${jourIso()}`), kv.get(`stt:sec:${app}:${jourIso().slice(0, 7)}`),
   ]);
-  const engine = Object.prototype.hasOwnProperty.call(MOTEURS, brut) ? brut : APPS_STT[app].defaut;
+  const permis = moteursDe(app);
+  const engine = permis.includes(brut) ? brut : APPS_STT[app].defaut;
   return {
     app, nom: APPS_STT[app].nom, engine, label: MOTEURS[engine],
-    configured: brut, par_defaut: brut === null || !(brut in MOTEURS),
+    configured: brut, par_defaut: brut === null || !permis.includes(brut),
     changed: meta || null, last_error: last || null,
     errors_today: parseInt(eAuj || '0', 10), errors_yesterday: parseInt(eHier || '0', 10),
     // P5.3 : secondes d'audio facturées par Azure via /api/mai (estimation : compteur KV sans verrou)
     mai_secondes_jour: parseFloat(sJour || '0'), mai_secondes_mois: parseFloat(sMois || '0'), mai_prix_heure: MAI_PRIX_HEURE,
-    moteurs: Object.entries(MOTEURS).map(([id, label]) => ({ id, label })),
+    moteurs: permis.map((id) => ({ id, label: MOTEURS[id] })),
   };
 }
 
 /** Bascule (POST /admin/stt-engine) — l'auth admin est faite AVANT par la gateway. */
 export async function basculer(kv, app, corps) {
   const cible = corps && corps.engine;
-  if (!Object.prototype.hasOwnProperty.call(MOTEURS, cible)) {
-    return { status: 400, body: { ok: false, error: 'engine inconnu', moteurs: Object.keys(MOTEURS) } };
+  if (!moteursDe(app).includes(cible)) {
+    return { status: 400, body: { ok: false, error: 'engine inconnu', moteurs: moteursDe(app) } };
   }
   const avant = await moteurDe(kv, app);
   await kv.put(`cfg:stt_engine:${app}`, cible);
