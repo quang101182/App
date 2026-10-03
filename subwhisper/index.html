@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.63</title>
+<title>SubWhisper v9.64</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1143,7 +1143,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.63</span>
+    <span class="ver-badge">v9.64</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1312,8 +1312,10 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <option value="ko">Coréen</option>
   </select>
   <span class="lb-div"></span>
-  <span class="lb-lbl" title="Moteur de transcription. Groq : rapide, jamais muet. Gemini : nettement plus juste, mais muet sur un audio sans parole articulee. Croise : Gemini avec Groq en filet.">STT</span>
+  <span class="lb-lbl" title="Moteur de transcription. Auto : celui choisi au dashboard (Sous-titrage). MAI : le plus complet, n'invente rien sur la musique. Groq : rapide, jamais muet. Gemini : juste mais muet sur un audio sans parole articulee. Croise : Gemini avec Groq en filet.">STT</span>
   <select id="sttEngine" onchange="saveSttEngine(this.value)">
+    <option value="auto">Auto</option>
+    <option value="mai2">MAI</option>
     <option value="groq">Groq</option>
     <option value="gemini">Gemini</option>
     <option value="croise">Croise</option>
@@ -1486,7 +1488,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.63 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.64 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -1693,6 +1695,7 @@ function init() {
   document.getElementById('gatewayKey').addEventListener('keydown', function(e) { if (e.key === 'Enter') { clearTimeout(_gwTimer); _saveGwKey(); } });
   // Lancer fetchGatewayConfig immédiatement après chargement de la clé
   setTimeout(fetchGatewayConfig, 300);
+  setTimeout(refreshSttAuto, 900);   // v9.64 : moteur pilote au dashboard
   try {
     var s = localStorage.getItem('sw_srcLang'); if (s !== null) { document.getElementById('srcLang').value = s; document.getElementById('srcLangMain').value = s; }
     var o = localStorage.getItem('sw_outLang'); if (o !== null) { document.getElementById('outLang').value = o; document.getElementById('outLangMain').value = o; }
@@ -1744,7 +1747,32 @@ function getAIEngine()    { return document.getElementById('aiEngine')?.value ||
 // meilleur partout ou il y a de la parole articulee (reunions bruitees 14,7 % contre
 // 22,2 %), mais il rend VIDE 9 fois sur 40 sur un audio a faible parole, la ou Groq
 // n'est jamais muet (0/40). D'ou le 3e mode.
-function getSttEngine()   { return document.getElementById('sttEngine')?.value || 'groq'; }
+// v9.64 (03/10/2026) : « Auto » = le moteur choisi au DASHBOARD pour l'app « soustitrage » (gateway v1.64,
+// GET /api/stt-engine). Un choix explicite dans ce menu reste prioritaire SUR CE NAVIGATEUR (decision D4).
+// Si la lecture echoue, on garde la derniere valeur lue, a defaut le defaut de la gateway (croise) : aucune
+// bascule n'est inventee ici. Chantier : Repo-github/moteur-transcription-MAI/ROADMAP.md (P2).
+var _sttAuto = { engine: 'croise', label: '', lu: false };
+var STT_COURT = { 'mai2': 'MAI', 'mai2-openrouter': 'MAI-OR', 'croise': 'Croise', 'gemini': 'Gemini', 'groq': 'Groq' };
+async function refreshSttAuto() {
+  var gk = getGatewayKey();
+  if (!gk) return _sttAuto;
+  try {
+    var r = await fetch(GATEWAY_URL + '/api/stt-engine?app=soustitrage',
+                        { headers: { 'Authorization': 'Bearer ' + gk }, cache: 'no-store' });
+    if (r.ok) {
+      var j = await r.json();
+      if (j && j.engine) _sttAuto = { engine: j.engine, label: j.label || j.engine, lu: true };
+    }
+  } catch (e) { /* on garde la derniere valeur connue */ }
+  var opt = document.querySelector('#sttEngine option[value="auto"]');
+  if (opt) opt.textContent = 'Auto' + (_sttAuto.lu ? ' (' + (STT_COURT[_sttAuto.engine] || _sttAuto.engine) + ')' : '');
+  return _sttAuto;
+}
+function getSttEngine() {
+  var v = document.getElementById('sttEngine')?.value || 'auto';
+  // `typeof` : Telegramme Video execute cette fonction HORS de la page (paquet extrait), sans _sttAuto.
+  return v === 'auto' ? (typeof _sttAuto !== 'undefined' ? _sttAuto.engine : 'croise') : v;
+}
 function syncLangMain(type, val) {
   if (type === 'src') {
     document.getElementById('srcLang').value = val;
@@ -1952,6 +1980,11 @@ async function transcribe() {
   if (!selFile) return;
   if (!getOpenAIKey() && !getApiKey() && !getGroqKey() && API_DOTS['GWY'] !== 'ok') { showErr('Gateway non connectée. Entrez votre GATEWAY SECRET dans les paramètres (⚙️).'); toggleConfig(); return; }
   collapseFilePrev();
+  if ((document.getElementById('sttEngine')?.value || 'auto') === 'auto') {   // v9.64 : etat du dashboard a l'instant T
+    await refreshSttAuto();
+    appendLog('🎛️ Moteur STT (dashboard) : ' + (_sttAuto.label || _sttAuto.engine) +
+              (_sttAuto.lu ? '' : ' — lecture impossible, defaut'));
+  }
   // Priorité : Groq > Gateway > OpenAI > AAI
   if (getGroqKey() || API_DOTS['GWY'] === 'ok') { await transcribeGroq(); return; }
   if (getOpenAIKey()) { await transcribeOpenAI(); return; }
@@ -2633,22 +2666,44 @@ var BCP47_STT = { fr:'fr-FR', en:'en-US', de:'de-DE', es:'es-ES', it:'it-IT',
 // plafond que autoFormatSRT). Mesure du 07/09 : ces blocs sont PLUS conformes que
 // les segments natifs de Groq (38 % de blocs en violation contre 82 % en francais),
 // parce qu'on controle la coupe au lieu de la subir.
-function motsVersBlocs(mots, maxRelEnd) {
+// v9.64 : jointure des mots en texte. MAI (comme Gemini) rend le chinois/japonais CARACTERE par caractere ;
+// les joindre par des espaces donnait « 怎 么 样 ， 老 师 ». Ici : espace seulement entre deux mots latins,
+// rien devant la ponctuation ni entre ideogrammes. Longueur : un caractere CJK compte DOUBLE, pour garder des
+// blocs de la meme taille qu'avec l'ancienne jointure (sinon la traduction FR doublerait de longueur).
+var _RX_CJK = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef\u3000-\u303f]/;
+var _RX_PONCT = /^[\s。，、．.,!?！？…:;：；)\]）】」』”’~～-]/;
+function _jointureCjk(mots) {
+  var t = '';
+  for (var i = 0; i < mots.length; i++) {
+    var m = mots[i] || '';
+    if (!m) continue;
+    var a = t.slice(-1), b = m.charAt(0);
+    var espace = t && !_RX_PONCT.test(b) && !_RX_CJK.test(a) && !_RX_CJK.test(b);
+    t += (espace ? ' ' : '') + m;
+  }
+  return t;
+}
+function _longueurCjk(t) { var n = 0; for (var i = 0; i < t.length; i++) n += _RX_CJK.test(t.charAt(i)) ? 2 : 1; return n; }
+
+// `cjk` (v9.64, MAI uniquement) : jointure sans espaces entre ideogrammes ; absent = comportement d'origine (Gemini).
+function motsVersBlocs(mots, maxRelEnd, cjk) {
   var PAUSE = 0.6, MAX_CH = 84;
+  var joindre = cjk ? _jointureCjk : function(c) { return c.join(' '); };
+  var longueur = cjk ? _longueurCjk : function(t) { return t.length; };
   var blocs = [], cur = [], t0 = null, prevFin = null;
   for (var i = 0; i < mots.length; i++) {
     var w = mots[i];
     var coupe = (prevFin !== null && w.start - prevFin > PAUSE) ||
-                (cur.length && (cur.join(' ').length + 1 + w.text.length) > MAX_CH);
+                (cur.length && (longueur(joindre(cur)) + 1 + longueur(w.text)) > MAX_CH);
     if (coupe && cur.length) {
-      blocs.push({ start: t0, end: prevFin, text: cur.join(' ') });
+      blocs.push({ start: t0, end: prevFin, text: joindre(cur) });
       cur = []; t0 = null;
     }
     if (t0 === null) t0 = w.start;
     cur.push(w.text);
     prevFin = w.end;
   }
-  if (cur.length) blocs.push({ start: t0, end: prevFin, text: cur.join(' ') });
+  if (cur.length) blocs.push({ start: t0, end: prevFin, text: joindre(cur) });
   // Meme garde-fou anti-hallucination que le chemin Groq : un bloc ne peut ni
   // depasser 30 s ni sortir de la duree du chunk.
   var cap = maxRelEnd || Infinity;
@@ -2816,12 +2871,136 @@ async function transcribeChunkCroise(file, srcLang, key, chunkNum, totalChunks, 
   return g;
 }
 
+// ── MAI-Transcribe-2 (v9.64, 03/10/2026) ───────────────────────────────────
+// Bancs et chiffres : Repo-github/moteur-transcription-MAI/ETAT-DES-LIEUX.md. Relais gateway /api/mai (cle
+// Azure cote serveur ; PAS d'en-tete X-Stt-App depuis le navigateur : absent de la liste CORS de la gateway,
+// et `soustitrage` est son defaut). Quatre pieges MESURES, tous traites ici :
+//  1. SANS modelOptions.timestamps="word", MAI rend UNE phrase couvrant toute la tranche, sans aucun timing ;
+//  2. le 1er SEGMENT d'une tranche est date a 0,0 s -> on decoupe par les MOTS (motsVersBlocs), jamais les segments ;
+//  3. non deterministe sur les interjections, et peut BOUCLER (« 嗯。 » x~170, 1 appel sur 10 d'une tranche piege)
+//     -> toute suite de plus de MAI_BOUCLE_MAX mots identiques est reduite ;
+//  4. langue etiquetee PAR SEGMENT et bruitee (th/da/tr sur des « 啊 ») -> langue de la tranche = majorite au
+//     volume de texte ; la langue source choisie par l'utilisateur est transmise (corrige les chuchotements
+//     chinois rendus en suedois, mesure sur 30 s).
+// Formats : MAI n'accepte que WAV/MP3/FLAC -> tout autre fichier est converti en WAV 16 kHz mono ici.
+// Panne : l'erreur remonte telle quelle (aucune bascule automatique, decision D2) ; la gateway compte et alerte.
+var MAI_BOUCLE_MAX = 8;
+var MAI_FORMATS = /^audio\/(wav|x-wav|wave|vnd\.wave|mpeg|mp3|flac|x-flac)$/i;
+
+async function _fichierPourMai(file) {
+  if (MAI_FORMATS.test(file.type || '') || /\.(wav|mp3|flac)$/i.test(file.name || '')) return file;
+  var ctx = new (window.AudioContext || window.webkitAudioContext)();
+  var decoded;
+  try { decoded = await ctx.decodeAudioData(await file.arrayBuffer()); }
+  catch (e) { throw new Error('Format non decodable pour MAI : extrayez l’audio (WAV) d’abord'); }
+  finally { try { ctx.close(); } catch (e2) {} }
+  var off = new OfflineAudioContext(1, Math.ceil(decoded.duration * 16000), 16000);
+  var src = off.createBufferSource();
+  src.buffer = decoded; src.connect(off.destination); src.start(0);
+  var wav = encodeWav(await off.startRendering());
+  return new File([new Blob([wav], { type: 'audio/wav' })], 'mai.wav', { type: 'audio/wav' });
+}
+
+// Reduit les boucles : au-dela de MAI_BOUCLE_MAX mots identiques d'affilee, les suivants (et la ponctuation
+// qui les accompagne) sont ignores. La ponctuation seule (« 。 ») ne compte pas comme un mot.
+function _maiSansBoucle(mots) {
+  var out = [], dernier = null, suite = 0, garde = true, retires = 0;
+  for (var i = 0; i < mots.length; i++) {
+    var cle = (mots[i].text || '').replace(/[\s。，、．.,!?！？…~～]/g, '');
+    if (!cle) { if (garde) out.push(mots[i]); continue; }
+    suite = (cle === dernier) ? suite + 1 : 1;
+    dernier = cle;
+    garde = suite <= MAI_BOUCLE_MAX;
+    if (garde) out.push(mots[i]); else retires++;
+  }
+  return { mots: out, retires: retires };
+}
+
+async function transcribeChunkMai(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec, viaOpenRouter) {
+  var f = await _fichierPourMai(file);
+  var _gwKey = getGatewayKey();
+  var mots = [], volume = {}, resp;
+  if (!viaOpenRouter) {
+    var def = { enhancedMode: { enabled: true, model: 'MAI-Transcribe-2',
+                                modelOptions: { timestamps: 'word', transcribeStyle: 'verbatim' } } };
+    if (srcLang) def.locales = [srcLang];
+    var fd = new FormData();
+    fd.append('audio', f, f.name || 'audio.wav');
+    fd.append('definition', JSON.stringify(def));
+    resp = await fetch(GATEWAY_URL + '/api/mai', {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + _gwKey },
+      body: fd, signal: _abortCtrl ? _abortCtrl.signal : undefined
+    });
+    if (!resp.ok) {
+      var t = await resp.text().catch(function() { return ''; });
+      throw new Error('MAI chunk ' + chunkNum + '/' + totalChunks + ' : HTTP ' + resp.status + ' ' + t.slice(0, 160));
+    }
+    var data = await resp.json();
+    (data.phrases || []).forEach(function(p) {
+      volume[p.locale || '?'] = (volume[p.locale || '?'] || 0) + (p.text || '').length;
+      (p.words || []).forEach(function(w) {
+        var s0 = (w.offsetMilliseconds || 0) / 1000;
+        mots.push({ start: s0, end: s0 + (w.durationMilliseconds || 0) / 1000, text: w.text || '' });
+      });
+    });
+  } else {
+    // Secours manuel (dashboard) : meme modele via OpenRouter. Mesure : 12/20 au 1er essai, 2-3x plus lent.
+    var b64 = await new Promise(function(res, rej) {
+      var fr = new FileReader();
+      fr.onload = function() { res(String(fr.result).split(',')[1]); };
+      fr.onerror = rej;
+      fr.readAsDataURL(f);
+    });
+    var fmt = /mpeg|mp3/i.test(f.type) ? 'mp3' : (/flac/i.test(f.type) ? 'flac' : 'wav');
+    var body = { model: 'microsoft/mai-transcribe-2', input_audio: { data: b64, format: fmt },
+                 response_format: 'verbose_json', timestamp_granularities: ['word'] };
+    if (srcLang) body.language = srcLang;
+    resp = await fetch(GATEWAY_URL + '/api/openrouter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _gwKey,
+                 'X-Api-Path': '/api/v1/audio/transcriptions' },
+      body: JSON.stringify(body), signal: _abortCtrl ? _abortCtrl.signal : undefined
+    });
+    if (!resp.ok) {
+      var t2 = await resp.text().catch(function() { return ''; });
+      throw new Error('MAI (OpenRouter) chunk ' + chunkNum + '/' + totalChunks + ' : HTTP ' + resp.status + ' ' + t2.slice(0, 160));
+    }
+    var d2 = await resp.json();
+    (d2.words || []).forEach(function(w) {
+      mots.push({ start: w.start || 0, end: (w.end || w.start || 0), text: w.word || '' });
+    });
+    if (d2.language) volume[d2.language] = 1;
+  }
+  var nb = _maiSansBoucle(mots);
+  if (nb.retires) appendLog('🔁 MAI ' + chunkNum + '/' + totalChunks + ' : boucle reduite (' + nb.retires + ' mots repetes retires)');
+  mots = nb.mots;
+  // Langue renvoyee : comme le chemin Gemini (le moteur en prod), la langue CHOISIE ou rien — SubWhisper la deduit
+  // ensuite de l'ecriture. Les etiquettes MAI sont trop bruitees sur les interjections : mesure en reel (v9.64) sur une
+  // video d'« Ah. Oh. » chinois/coreens -> majorite « vi ». La majorite MAI n'est qu'indicative (journal).
+  var majorite = Object.keys(volume).sort(function(a, b) { return volume[b] - volume[a]; })[0] || '';
+  if (!srcLang && majorite && majorite !== '?') appendLog('🌐 MAI ' + chunkNum + '/' + totalChunks + ' : langue majoritaire ' + majorite + ' (indicatif)');
+  var langue = srcLang || '';
+
+  var segments = motsVersBlocs(mots, chunkDurSec, true).map(function(b) {
+    return { start: b.start + offsetSec, end: b.end + offsetSec, text: b.text };
+  }).filter(function(sg) { return sg.text.trim(); });
+  // Vue RICH (surlignage mot a mot), comme le chemin Gemini.
+  mots.forEach(function(w) { wordData.push({ start: w.start + offsetSec, end: w.end + offsetSec, text: w.text }); });
+  var srt = segments.map(function(seg, i) {
+    return (i + 1) + '\n' + secToSrtTime(seg.start) + ' --> ' + secToSrtTime(seg.end) + '\n' + seg.text.trim();
+  }).join('\n\n') + '\n';
+  return { srt: srt, lang: langue, segments: segments,
+           rawSegments: mots.map(function(w) { return { start: w.start, end: w.end }; }) };
+}
+
 // Dispatch : c'est le SEUL point ou le choix de moteur agit. Toute la logique de
 // decoupage, de traduction et d'affichage reste celle de transcribeGroq().
 async function transcribeChunkAuto(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec) {
   var moteur = getSttEngine();
   if (moteur === 'gemini') return transcribeChunkGemini(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec);
   if (moteur === 'croise') return transcribeChunkCroise(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec);
+  if (moteur === 'mai2') return transcribeChunkMai(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec, false);
+  if (moteur === 'mai2-openrouter') return transcribeChunkMai(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec, true);
   return transcribeChunkGroq(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec);
 }
 
@@ -4551,7 +4730,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.63',
+    version: 'v9.64',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,

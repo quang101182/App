@@ -45,7 +45,7 @@ const os = require('os');
 // Source UNIQUE de la version : la banniere de demarrage et /health la lisent
 // toutes les deux ici. Le 07/09 elles avaient diverge (1.30.0 vs 1.32.0), ce qui
 // rend le log de demarrage menteur — donc inutilisable pour verifier un deploiement.
-const SERVER_VERSION = '1.37.0';
+const SERVER_VERSION = '1.38.0';   // 1.38.0 (03/10/2026) : moteur MAI-Transcribe-2 (mai2, mai2-openrouter)
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
@@ -80,8 +80,15 @@ function moteurUtiliseGemini(sttEngine) {
   const m = (sttEngine || 'groq').toLowerCase();
   return m === 'gemini' || m === 'croise';
 }
+function moteurUtiliseMai(sttEngine) {
+  const m = (sttEngine || '').toLowerCase();
+  return m === 'mai2' || m === 'mai2-openrouter';
+}
+// v1.38.0 : MAI recoit les MEMES tranches de ~360 s que Gemini (decision D6 du 03/10 : parite avec tout le
+// post-traitement, et la langue est mieux reconnue avec ce contexte qu'avec 30 s). Il accepterait bien plus
+// (2 h / 300 Mo mesures), mais changer moteur ET decoupage d'un coup rendrait tout ecart inexplicable.
 function chunkMaxBytesPour(sttEngine) {
-  return moteurUtiliseGemini(sttEngine) ? CHUNK_MAX_BYTES_GEMINI : CHUNK_MAX_BYTES;
+  return (moteurUtiliseGemini(sttEngine) || moteurUtiliseMai(sttEngine)) ? CHUNK_MAX_BYTES_GEMINI : CHUNK_MAX_BYTES;
 }
 
 // Groq
@@ -710,7 +717,9 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, sttEngine, groq
   // base64 (cf. CHUNK_MAX_BYTES_GEMINI). Sans ca, tous les chunks partaient en 400.
   const chunkMax = chunkMaxBytesPour(sttEngine);
   const chunkDur = chunkMax / 32000;
-  const nomMoteur = moteurUtiliseGemini(sttEngine)
+  const nomMoteur = moteurUtiliseMai(sttEngine)
+    ? ((sttEngine || '').toLowerCase() === 'mai2-openrouter' ? 'MAI-Transcribe-2 (OpenRouter)' : 'MAI-Transcribe-2')
+    : moteurUtiliseGemini(sttEngine)
     ? ((sttEngine || '').toLowerCase() === 'croise' ? 'Gemini+Groq (croise)' : 'Gemini')
     : 'Groq Whisper';
   console.log(`[${jobId}] Moteur STT = ${sttEngine || 'groq'} -> chunks de ${(chunkMax / 1024 / 1024).toFixed(1)} Mo (${chunkDur.toFixed(0)}s)`);
@@ -1009,10 +1018,129 @@ async function transcribeWithGemini({ jobId, wavBuffer, chunkIdx, srcLang, gatew
  * le 07/09 apres mesure (sur des videos reelles les deux moteurs divergent
  * naturellement de 49 a 100 % sans que personne n'hallucine).
  */
+
+/**
+ * v1.38.0 (03/10/2026) — MAI-Transcribe-2 via la gateway (/api/mai, cle Azure cote serveur) ou, en secours
+ * manuel choisi au dashboard, via OpenRouter. Rend EXACTEMENT le meme tableau de segments que
+ * transcribeWithGemini (meme decoupe des mots en blocs : pause > 0,6 s ou 84 caracteres).
+ * Pieges MESURES (Repo-github/moteur-transcription-MAI/ETAT-DES-LIEUX.md) :
+ *  - sans modelOptions.timestamps="word" : UNE phrase sur toute la tranche, aucun timing ;
+ *  - 1er segment date a 0,0 s -> on ne lit que les MOTS ;
+ *  - peut boucler sur une interjection (« 嗯。 » x~170, 1 appel sur 10 d'une tranche piege) -> au-dela de
+ *    MAI_BOUCLE_MAX mots identiques d'affilee, la suite est ignoree ;
+ *  - la langue source choisie est transmise (corrige des erreurs de langue sur chuchotements).
+ * AUCUNE bascule automatique (decision D2) : une erreur remonte apres 3 tentatives ; la gateway compte et alerte.
+ */
+const MAI_BOUCLE_MAX = 8;
+function maiSansBoucle(mots) {
+  const out = []; let dernier = null, suite = 0, garde = true, retires = 0;
+  for (const w of mots) {
+    const cle = (w.text || '').replace(/[\s。，、．.,!?！？…~～]/g, '');
+    if (!cle) { if (garde) out.push(w); continue; }
+    suite = cle === dernier ? suite + 1 : 1;
+    dernier = cle;
+    garde = suite <= MAI_BOUCLE_MAX;
+    if (garde) out.push(w); else retires++;
+  }
+  return { mots: out, retires };
+}
+
+// v1.38.0 (meme regle que SubWhisper v9.64) : jointure des mots en texte. MAI (comme Gemini) rend le chinois/japonais CARACTERE par caractere ;
+// les joindre par des espaces donnait « 怎 么 样 ， 老 师 ». Ici : espace seulement entre deux mots latins,
+// rien devant la ponctuation ni entre ideogrammes. Longueur : un caractere CJK compte DOUBLE, pour garder des
+// blocs de la meme taille qu'avec l'ancienne jointure (sinon la traduction FR doublerait de longueur).
+const _RX_CJK = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef\u3000-\u303f]/;
+const _RX_PONCT = /^[\s。，、．.,!?！？…:;：；)\]）】」』”’~～-]/;
+function _jointureCjk(mots) {
+  let t = '';
+  for (let i = 0; i < mots.length; i++) {
+    const m = mots[i] || '';
+    if (!m) continue;
+    const a = t.slice(-1), b = m.charAt(0);
+    const espace = t && !_RX_PONCT.test(b) && !_RX_CJK.test(a) && !_RX_CJK.test(b);
+    t += (espace ? ' ' : '') + m;
+  }
+  return t;
+}
+function _longueurCjk(t) { let n = 0; for (let i = 0; i < t.length; i++) n += _RX_CJK.test(t.charAt(i)) ? 2 : 1; return n; }
+
+function motsVersSegments(mots, offsetSec, chunkDurationSec) {
+  const PAUSE = 0.6, MAX_CH = 84;
+  const maxRelEnd = chunkDurationSec || Infinity;
+  const blocs = [];
+  let cur = [], t0 = null, finPrec = null;
+  for (const w of mots) {
+    const coupe = (finPrec !== null && w.start - finPrec > PAUSE) ||
+                  (cur.length && _longueurCjk(_jointureCjk(cur)) + 1 + _longueurCjk(w.text) > MAX_CH);
+    if (coupe && cur.length) { blocs.push({ start: t0, end: finPrec, text: _jointureCjk(cur) }); cur = []; t0 = null; }
+    if (t0 === null) t0 = w.start;
+    cur.push(w.text);
+    finPrec = w.end;
+  }
+  if (cur.length) blocs.push({ start: t0, end: finPrec, text: _jointureCjk(cur) });
+  return blocs.map(b => {
+    const relEnd = Math.min(b.end, b.start + 30, maxRelEnd);
+    return { start: b.start + offsetSec, end: Math.max(relEnd + offsetSec, b.start + offsetSec + 0.1),
+             text: (b.text || '').trim() };
+  }).filter(seg => seg.text.length > 0);
+}
+
+async function transcribeWithMai({ jobId, wavBuffer, chunkIdx, srcLang, sttEngine, gatewayKey, gatewayUrl,
+                                   offsetSec, chunkDurationSec }) {
+  const viaOR = (sttEngine || '').toLowerCase() === 'mai2-openrouter';
+  const langue = (srcLang || '').trim();
+  const MAX_RETRIES = 3;
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[${jobId}] Chunk ${chunkIdx}: appel MAI${viaOR ? ' (OpenRouter)' : ''} (tentative ${attempt}/${MAX_RETRIES})...`);
+      let mots = [];
+      if (!viaOR) {
+        const def = { enhancedMode: { enabled: true, model: 'MAI-Transcribe-2',
+                                      modelOptions: { timestamps: 'word', transcribeStyle: 'verbatim' } } };
+        if (langue) def.locales = [langue];
+        const fd = new FormData();
+        fd.append('audio', new Blob([wavBuffer], { type: 'audio/wav' }), `chunk_${chunkIdx}.wav`);
+        fd.append('definition', JSON.stringify(def));
+        const r = await fetch(`${gatewayUrl}/api/mai`, { method: 'POST',
+          headers: { 'Authorization': `Bearer ${gatewayKey}`, 'X-Stt-App': 'soustitrage' }, body: fd });
+        if (!r.ok) throw new Error(`MAI HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+        const j = await r.json();
+        for (const p of j.phrases || []) for (const w of p.words || []) {
+          const s0 = (w.offsetMilliseconds || 0) / 1000;
+          mots.push({ start: s0, end: s0 + (w.durationMilliseconds || 0) / 1000, text: w.text || '' });
+        }
+      } else {
+        const body = { model: 'microsoft/mai-transcribe-2',
+                       input_audio: { data: Buffer.from(wavBuffer).toString('base64'), format: 'wav' },
+                       response_format: 'verbose_json', timestamp_granularities: ['word'] };
+        if (langue) body.language = langue;
+        const r = await fetch(`${gatewayUrl}/api/openrouter`, { method: 'POST',
+          headers: { 'Authorization': `Bearer ${gatewayKey}`, 'Content-Type': 'application/json',
+                     'X-Api-Path': '/api/v1/audio/transcriptions' }, body: JSON.stringify(body) });
+        if (!r.ok) throw new Error(`MAI(OpenRouter) HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+        const j = await r.json();
+        mots = (j.words || []).map(w => ({ start: w.start || 0, end: w.end || w.start || 0, text: w.word || '' }));
+      }
+      const nb = maiSansBoucle(mots);
+      if (nb.retires) console.warn(`[${jobId}] Chunk ${chunkIdx}: boucle MAI reduite (${nb.retires} mots repetes retires)`);
+      const segments = motsVersSegments(nb.mots, offsetSec, chunkDurationSec);
+      console.log(`[${jobId}] Chunk ${chunkIdx}: ${segments.length} segments recus de MAI (offset=${offsetSec.toFixed(1)}s)`);
+      return segments;
+    } catch (err) {
+      lastError = err;
+      console.error(`[${jobId}] Chunk ${chunkIdx}: MAI tentative ${attempt} echouee:`, err.message);
+      if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, attempt * 5000));
+    }
+  }
+  throw lastError;
+}
+
 async function transcribeChunkAuto(args) {
   const moteur = (args.sttEngine || 'groq').toLowerCase();
   if (moteur === 'groq') return transcribeWithGroq(args);
   if (moteur === 'gemini') return transcribeWithGemini(args);
+  if (moteur === 'mai2' || moteur === 'mai2-openrouter') return transcribeWithMai(args);
 
   let segs = [];
   try {
