@@ -604,7 +604,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.39.0-cout-mai';
+    const VERSION = 'v2.40.0-swp-moteur';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -637,7 +637,7 @@
       // Jeton DÉDIÉ (DASH_STT_TOKEN côté api-gateway, injecté par se7enai-dash) : il n'ouvre QUE /admin/stt-engine.
       // Ancre `#st` = le lien que la passerelle met dans son alerte Telegram de panne MAI.
       // v2.38.0 (demande Quang 03/10) : TOUS les interrupteurs de moteur réunis ici, DictoKey compris.
-      { key: 'st', name: 'Moteurs', icon: '⇄', family: 'ops', auth: 'none', tokenKey: 'monitoring_st_token', endpoints: {}, subtitle: 'Tous les interrupteurs de transcription — DictoKey et sous-titrage, lus en direct.', sections: [] },
+      { key: 'st', name: 'Moteurs', icon: '⇄', family: 'ops', auth: 'none', tokenKey: 'monitoring_st_token', endpoints: {}, subtitle: 'Tous les interrupteurs de transcription — DictoKey, sous-titrage et SubWhisper Pro, lus en direct.', sections: [] },
       { key: 'factory', name: 'Factory', icon: '▦', family: 'ops', auth: 'none', tokenKey: 'monitoring_factory_token', endpoints: {}, subtitle: 'Ebook Funnel Factory — opérations et performance.', sections: [] },
       { key: 'studio', name: 'Studio', icon: '▣', family: 'ops', auth: 'none', endpoints: {}, subtitle: 'Agenda et opérations de publication.', sections: [] }
     ];
@@ -2314,31 +2314,47 @@
       'groq':            { qualite: '★', qNote: 'invente du texte sur musique et silence (13 instrumentaux sur 13)', temps: '3,2 s', prix: '0,04 $/h' },
     };
 
-    function stPlaceholder() {
-      setTimeout(stLoad, 0);
-      return `<div id="st-banner" class="stt-banner"><div class="stt-head"><span class="stt-title">Moteur de sous-titrage</span><span class="stt-main">lecture en direct…</span></div></div>`;
+    // v2.40.0 (P7.3) : le même bloc sert à CHAQUE interrupteur à N moteurs. Une source = une passerelle + son jeton.
+    // SubWhisper Pro (app à REVENUS) : passerelle Pro, jeton admin Pro déjà injecté (monitoring_swp_token), défaut Groq.
+    const ST_SOURCES = {
+      st:  { banniere: 'st-banner', titre: 'Sous-titrage · SubWhisper + Télégramme Vidéo', base: ST_GATEWAY, app: 'soustitrage', jeton: 'st',
+             objet: 'le sous-titrage',
+             effet: "Effet d'une bascule : Télégramme Vidéo à la vidéo suivante (≤ 1 min) ; SubWhisper sur les navigateurs réglés sur « Auto » dans le menu STT.",
+             panne: "en cas de panne MAI, Télégramme Vidéo met sa file en pause, SubWhisper affiche l'erreur" },
+      swp: { banniere: 'swp-banner', titre: 'SubWhisper Pro · app payante', base: 'https://api-gateway-pro.quang101182.workers.dev', app: 'swp', jeton: 'swp',
+             objet: 'SubWhisper Pro (clients payants)',
+             effet: "Effet d'une bascule : à la transcription suivante de chaque client (le moteur est lu au début de chaque transcription). Chaque tranche reste décomptée comme une transcription, quel que soit le moteur.",
+             panne: "en cas de panne MAI, la transcription du client échoue avec l'erreur" },
+    };
+
+    function stPlaceholder(id = 'st') {
+      const src = ST_SOURCES[id];
+      setTimeout(() => stLoad(id), 0);
+      return `<div id="${src.banniere}" class="stt-banner"><div class="stt-head"><span class="stt-title">${safeText(src.titre)}</span><span class="stt-main">lecture en direct…</span></div></div>`;
     }
 
-    async function stLoad() {
-      if (!document.getElementById('st-banner')) return;
-      const tok = getToken(getApp('st'));
+    async function stLoad(id = 'st') {
+      const src = ST_SOURCES[id];
+      if (!document.getElementById(src.banniere)) return;
+      const tok = getToken(getApp(src.jeton));
       let etat = null, erreur = null;
       if (!tok) erreur = 'jeton absent (il est injecté par dash.se7enai.com — page ouverte hors du domaine protégé ?)';
       else {
         try {
-          const r = await fetch(`${ST_GATEWAY}/admin/stt-engine?app=soustitrage`, { headers: { Authorization: `Bearer ${tok}` }, cache: 'no-store' });
+          const r = await fetch(`${src.base}/admin/stt-engine?app=${src.app}`, { headers: { Authorization: `Bearer ${tok}` }, cache: 'no-store' });
           if (!r.ok) erreur = `HTTP ${r.status}`; else etat = await r.json();
         } catch (e) { erreur = e.message || 'réseau'; }
       }
-      const el = document.getElementById('st-banner');
-      if (el) el.outerHTML = stRender(etat, erreur);
+      const el = document.getElementById(src.banniere);
+      if (el) el.outerHTML = stRender(id, etat, erreur);
     }
 
-    function stRender(s, erreur) {
-      if (!s) return `<div id="st-banner" class="stt-banner stt-panne"><div class="stt-head"><span class="stt-title">Moteur de sous-titrage</span><span class="stt-main">Indisponible</span></div>`
+    function stRender(id, s, erreur) {
+      const src = ST_SOURCES[id];
+      if (!s) return `<div id="${src.banniere}" class="stt-banner stt-panne"><div class="stt-head"><span class="stt-title">${safeText(src.titre)}</span><span class="stt-main">Indisponible</span></div>`
         + `<div class="stt-rows"><div class="stt-row"><span class="stt-meta stt-err">${safeText(erreur || 'réponse vide')}</span></div></div></div>`;
       (s.moteurs || []).forEach(m => { stLabels[m.id] = m.label; });
-      const lib = id => stLabels[id] || id;
+      const lib = id2 => stLabels[id2] || id2;
       const pannes = s.errors_today || 0;
       const cls = pannes > 0 ? 'stt-panne' : (ST_CLS[s.engine] || '');
       const titre = pannes > 0 ? `⚠ ${pannes} panne${pannes > 1 ? 's' : ''} MAI aujourd'hui — moteur actuel : ${lib(s.engine)}` : `● ${lib(s.engine)}`;
@@ -2357,31 +2373,33 @@
         const i = ST_INFOS[m.id] || {}, actif = m.id === s.engine;
         return `<tr class="${actif ? 'st-actif' : ''}"><td><span class="st-nom">${safeText(m.label)}</span>${i.reco ? '<span class="st-reco">recommandé</span>' : ''}<span class="st-note">${safeText(i.qNote || '')}</span></td>`
           + `<td>${safeText(i.qualite || '?')}</td><td>${safeText(i.temps || '?')}</td><td>${safeText(i.prix || '?')}</td>`
-          + `<td>${actif ? '<span class="st-badge-actif">● ACTIF</span>' : `<button type="button" class="stt-btn" data-st-switch="${safeText(m.id)}">Choisir</button>`}</td></tr>`;
+          + `<td>${actif ? '<span class="st-badge-actif">● ACTIF</span>' : `<button type="button" class="stt-btn" data-st-src="${id}" data-st-switch="${safeText(m.id)}">Choisir</button>`}</td></tr>`;
       }).join('');
-      return `<div id="st-banner" class="stt-banner ${cls}"><div class="stt-head"><span class="stt-title">Sous-titrage · SubWhisper + Télégramme Vidéo</span><span class="stt-main">${safeText(titre)}</span></div>`
+      return `<div id="${src.banniere}" class="stt-banner ${cls}"><div class="stt-head"><span class="stt-title">${safeText(src.titre)}</span><span class="stt-main">${safeText(titre)}</span></div>`
         + `<div class="stt-meta">${safeText(meta.join(' · '))}</div>${err}`
         + `<div class="st-wrap"><table class="st-table"><thead><tr><th>Moteur</th><th>Qualité</th><th>Temps (6 min)</th><th>Prix</th><th></th></tr></thead><tbody>${lignes}</tbody></table></div>`
-        + `<div class="stt-foot">Classement mesuré le 03/10/2026 (prix MAI : offre de lancement jusqu'au 31/12/2026). Lu en direct · aucun secours automatique : en cas de panne MAI, Télégramme Vidéo met sa file en pause, SubWhisper affiche l'erreur, une alerte Telegram (1 par heure au plus) renvoie ici. `
-        + `Effet d'une bascule : Télégramme Vidéo à la vidéo suivante (≤ 1 min) ; SubWhisper sur les navigateurs réglés sur « Auto » dans le menu STT.</div></div>`;
+        + `<div class="stt-foot">Classement mesuré le 03/10/2026 (prix MAI : offre de lancement jusqu'au 31/12/2026). Lu en direct · aucun secours automatique : ${src.panne}, une alerte Telegram (1 par heure au plus) renvoie ici. `
+        + `${src.effet}</div></div>`;
     }
 
-    async function stSwitch(cible) {
-      const actuel = document.querySelector('#st-banner tr.st-actif .st-nom');
+    async function stSwitch(id, cible) {
+      const src = ST_SOURCES[id];
+      if (!src) return;
+      const actuel = document.querySelector(`#${src.banniere} tr.st-actif .st-nom`);
       const de = actuel ? actuel.textContent : '?';
       if (!stLabels[cible]) return;
-      if (!confirm(`Basculer le sous-titrage de « ${de} » vers « ${stLabels[cible]} » ?\n\nEffet en moins d'une minute pour SubWhisper (navigateurs en « Auto ») et Télégramme Vidéo (à la vidéo suivante).`)) return;
-      document.querySelectorAll('#st-banner .stt-btn').forEach(b => { b.disabled = true; });
+      if (!confirm(`Basculer ${src.objet} de « ${de} » vers « ${stLabels[cible]} » ?\n\n${src.effet}`)) return;
+      document.querySelectorAll(`#${src.banniere} .stt-btn`).forEach(b => { b.disabled = true; });
       try {
-        const r = await fetch(`${ST_GATEWAY}/admin/stt-engine?app=soustitrage`, {
+        const r = await fetch(`${src.base}/admin/stt-engine?app=${src.app}`, {
           method: 'POST', cache: 'no-store',
-          headers: { Authorization: `Bearer ${getToken(getApp('st'))}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${getToken(getApp(src.jeton))}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ engine: cible, source: 'dashboard' }),
         });
         const j = await r.json().catch(() => ({}));
         if (!r.ok || !j.ok || j.engine !== cible) alert(`Échec de la bascule : ${j.error || 'HTTP ' + r.status}`);
       } catch (e) { alert(`Échec de la bascule : ${e.message}`); }
-      await stLoad();   // relecture réelle : on affiche ce que la passerelle DIT, pas ce qu'on a demandé
+      await stLoad(id);   // relecture réelle : on affiche ce que la passerelle DIT, pas ce qu'on a demandé
     }
 
     function renderDkView(payload) {
@@ -3179,7 +3197,7 @@
       else if (app.key === 'dkpc') content = renderDkpcView(data);
       else if (app.key === 'factory') content = renderFactoryView(data);
       else if (app.key === 'studio') content = renderStudioView(data);
-      else if (app.key === 'st') content = sttPlaceholder() + stPlaceholder();
+      else if (app.key === 'st') content = sttPlaceholder() + stPlaceholder('st') + stPlaceholder('swp');
       else content = renderPlaceholder(app, data);
       // UN SEUL bouton « Actualiser », partout (demande Quang 16/07) : la fresh-bar juste en dessous EST
       // un bouton cliquable en entier, et elle porte le contexte (statut + date + âge). Le bouton du header
@@ -3238,7 +3256,7 @@
       const sttButton = event.target.closest('[data-stt-switch]');   // v2.36.0
       if (sttButton) { dkSttSwitch(sttButton.dataset.sttPlat, sttButton.dataset.sttSwitch); return; }
       const stButton = event.target.closest('[data-st-switch]');   // v2.37.0
-      if (stButton) { stSwitch(stButton.dataset.stSwitch); return; }
+      if (stButton) { stSwitch(stButton.dataset.stSrc || 'st', stButton.dataset.stSwitch); return; }
       // P3b2b — détail par appareil (délégation ; les clics DANS un panneau ouvert sont ignorés)
       if (event.target.closest('#dk-expand-all')) { dkExpandAllVisible(); return; }
       if (event.target.closest('#dk-collapse-all')) { dkCloseAllDevices(); return; }
