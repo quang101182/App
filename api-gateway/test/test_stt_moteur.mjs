@@ -114,10 +114,16 @@ async function batterie(worker) {
   ok('succes = aucun compteur de panne', !env.GATEWAY_KV.store.has(`stt:err:soustitrage:${jour()}`));
   ok('compteur de debit PROPRE a /api/mai', [...env.GATEWAY_KV.store.keys()].some((k) => k.startsWith('rl:mai:')));
 
+  // ── v1.66 (P5.4) : un 400 = la requete, PAS une panne -> ni compteur ni alerte
+  scenario.azure = 400;
+  r = await appel('POST', '/api/mai', { auth: ws, body: corps });
+  ok('400 (fichier/langue/modele refuses) relaye, mais NI panne NI alerte', r.status === 400
+     && !env.GATEWAY_KV.store.has(`stt:err:soustitrage:${jour()}`) && journal.tg.length === 0);
+
   // ── relais MAI : panne
   scenario.azure = 500;
   r = await appel('POST', '/api/mai', { auth: ws, body: corps });
-  ok('panne : erreur relayee (pas de bascule)', r.status === 500 && journal.azure.length === 2);
+  ok('panne : erreur relayee (pas de bascule)', r.status === 500 && journal.azure.length === 3);
   ok('panne : compteur 1 + derniere erreur', env.GATEWAY_KV.store.get(`stt:err:soustitrage:${jour()}`) === '1'
      && JSON.parse(env.GATEWAY_KV.store.get('stt:last_error:soustitrage')).status === 500);
   ok('panne : 1 alerte Telegram avec le lien du dashboard', journal.tg.length === 1 && journal.tg[0].includes('dash.se7enai.com'));
@@ -184,6 +190,8 @@ await mutation('jeton du dashboard accepte sur tout /admin/', 'index.js',
   'jeton dashboard REFUSE sur /admin/keys/get (401)');
 await mutation('jeton du dashboard refuse sur l interrupteur', 'index.js',
   '[env.ADMIN_TOKEN, env.DASH_STT_TOKEN]', 'env.ADMIN_TOKEN', 'jeton dashboard : lit l interrupteur');
+await mutation('un 400 compte comme panne', 'stt_moteur.js',
+  'return status >= 500 ||', 'return status >= 400 ||', '400 (fichier/langue/modele refuses) relaye, mais NI panne NI alerte');
 await mutation('defaut force a mai2 (le deploiement changerait le moteur tout seul)', 'stt_moteur.js',
   "defaut: 'croise',", "defaut: 'mai2',", 'defaut = croise (rien ne change au deploiement)');
 

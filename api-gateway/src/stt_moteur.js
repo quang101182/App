@@ -89,6 +89,12 @@ export async function basculer(kv, app, corps) {
   return { status: 200, body: { ok: true, changed_from: avant, ...(await etatMoteur(kv, app)) } };
 }
 
+/** P5.4 — une réponse MAI est-elle une PANNE (compteur + alerte) ? Oui : 5xx, clé refusée (401/403), quota (429).
+ *  Non : 400/404/413/415… = la requête est en cause (fichier illisible, langue, modèle), pas le service. */
+export function estPanneMai(status) {
+  return status >= 500 || status === 401 || status === 403 || status === 429;
+}
+
 /** Échec MAI : compteur du jour + dernière erreur lisible (best-effort, ne jette jamais). */
 export async function noterPanne(kv, app, status, message) {
   try {
