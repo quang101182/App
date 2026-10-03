@@ -36,7 +36,10 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.25.3';
+import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMoteur, etatMoteur, basculer, noterPanne, alerterPanne, cibleMai }
+  from './stt_moteur.js';
+
+const VERSION = '1.26.0';   // 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
 // v1.25.3 (2026-10-01) - API Polar : version EPINGLEE (en-tete Polar-Version).
 //   Polar versionne son API par trimestre depuis le 01/10/2026 ; sans en-tete, un appel suit la
 //   version courante et son contrat change sous nos pieds a chaque release. 2026-10 verifiee le
@@ -337,6 +340,54 @@ async function proxyGemini(request, env, apiPath) {
     headers: { 'Content-Type': 'application/json' },
     body: request.body,
   });
+  return new Response(resp.body, {
+    status: resp.status,
+    headers: { ...CORS_HEADERS, 'Content-Type': resp.headers.get('Content-Type') || 'application/json' },
+  });
+}
+
+// v1.26.0 — MAI-Transcribe-2 (Azure). Corps multipart relaye TEL QUEL (`audio` + `definition` : c'est l'app qui demande
+// les timestamps par mot). Seule une VRAIE panne (5xx/401/403/429/reseau) compte et alerte -- un 400 = la requete
+// (fichier illisible), pas MAI. AUCUNE bascule automatique : l'app recoit l'erreur (decision Quang 03/10, comme DictoKey).
+const MAI_CHAT_ID = '5867229613';   // meme destinataire que les alertes de la gateway principale (COSTWATCH_CHAT_ID)
+async function telegramPanne(env, texte) {
+  const token = await getApiKey('TELEGRAM_BOT_TOKEN', env);
+  if (!token) return { sent: false, reason: 'TELEGRAM_BOT_TOKEN absent' };
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: MAI_CHAT_ID, text: texte, disable_web_page_preview: true }),
+    });
+    return { sent: r.ok, status: r.status };
+  } catch (e) { return { sent: false, reason: String(e).slice(0, 120) }; }
+}
+
+async function proxyMai(request, env, ctx) {
+  let cle = null;
+  for (const nom of MAI_CLES) { cle = await getApiKey(nom, env); if (cle) break; }
+  if (!cle) return err('AZURE_SPEECH_KEY not configured', 503);
+  const app = 'swp';
+  const panne = async (status, message) => {
+    await noterPanne(env.PRO_KV, app, status, message);
+    await alerterPanne(env.PRO_KV, app, `HTTP ${status} ${message}`, (t) => telegramPanne(env, t));
+  };
+  let resp;
+  try {
+    const entetes = { 'Ocp-Apim-Subscription-Key': cle };
+    const ct = request.headers.get('Content-Type');
+    if (ct) entetes['Content-Type'] = ct;   // jamais un en-tete vide (revue Groq 03/10)
+    resp = await fetch(await cibleMai(env.PRO_KV), { method: 'POST', headers: entetes, body: request.body });
+  } catch (e) {
+    ctx.waitUntil(panne(0, String(e && e.message || e)));
+    return err('stt_indisponible: MAI injoignable', 502);
+  }
+  if (estPanneMai(resp.status)) {
+    const copie = resp.clone();
+    ctx.waitUntil(copie.text().catch(() => '').then((t) => panne(resp.status, t.slice(0, 200))));
+  } else if (resp.ok) {
+    const copie = resp.clone();
+    ctx.waitUntil(copie.json().then((j) => compterSecondes(env.PRO_KV, app, j && j.durationMilliseconds)).catch(() => {}));
+  }
   return new Response(resp.body, {
     status: resp.status,
     headers: { ...CORS_HEADERS, 'Content-Type': resp.headers.get('Content-Type') || 'application/json' },
@@ -1331,6 +1382,16 @@ export default {
     if (path.startsWith('/admin/')) {
       if (!checkAdmin(request, env)) return err('Unauthorized', 401);
 
+      // v1.26.0 - interrupteur de moteur STT de SubWhisper Pro (onglet Moteurs du dashboard)
+      if (path === '/admin/stt-engine' && (method === 'GET' || method === 'POST')) {
+        const app = appDemandee(url);
+        if (!app) return json({ error: 'app inconnue', apps: Object.keys(APPS_STT) }, 400);
+        if (method === 'GET') return json({ ok: true, ...(await etatMoteur(env.PRO_KV, app)) });
+        let corps = null; try { corps = await request.json(); } catch { /* 400 plus bas */ }
+        const r = await basculer(env.PRO_KV, app, corps);
+        return json(r.body, r.status);
+      }
+
       // Set API key
       if (path === '/admin/keys/set' && method === 'POST') {
         const body = await request.json();
@@ -1718,13 +1779,20 @@ export default {
         return handleStoryVoice(request, env, ctx, path, proKey, proData);
       }
 
+      // v1.26.0 - moteur STT a utiliser (lu par l'app au debut d'une transcription) : ne consomme rien
+      if (path === '/api/stt-engine' && method === 'GET') {
+        const app = appDemandee(url);
+        if (!app) return json({ error: 'app inconnue', apps: Object.keys(APPS_STT) }, 400);
+        return json(await lireMoteur(env.PRO_KV, app));
+      }
+
       // Rate limit check
       if (!await checkRateLimit(proKey, env)) {
         return err('Rate limit exceeded. Max 10 requests/minute.', 429);
       }
 
       // Determine usage type for this route
-      const usageType = (path === '/api/groq' || path === '/api/assemblyai' || path.startsWith('/api/assemblyai/'))
+      const usageType = (path === '/api/groq' || path === '/api/mai' || path === '/api/assemblyai' || path.startsWith('/api/assemblyai/'))
         ? 'transcription' : 'translation';
 
       // Check monthly usage limit
@@ -1748,6 +1816,11 @@ export default {
         const depuisUrl = /^\/v1(beta)?\/models\/[A-Za-z0-9._-]+:[A-Za-z]+$/.test(suffixe) ? suffixe : null;
         const apiPath = request.headers.get('X-Api-Path') || depuisUrl;
         return relayerEtCompter(proxyGemini(request, env, apiPath), proKey, 'translation', env, ctx);
+      }
+
+      // MAI proxy (v1.26.0) - meme quota et meme decompte que Groq : une tranche transcrite = une transcription
+      if (path === '/api/mai' && method === 'POST') {
+        return relayerEtCompter(proxyMai(request, env, ctx), proKey, 'transcription', env, ctx);
       }
 
       // Groq proxy
