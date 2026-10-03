@@ -13,7 +13,7 @@ from playwright.sync_api import sync_playwright
 sys.stdout.reconfigure(encoding="utf-8")
 KEY = open(os.path.expanduser(r"~\Documents\ComfyUI\.studio_secret"), encoding="utf-8").read().strip()
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8190
-CAP = {"type": "capture", "d": "ground-and-pound/ch_1", "titre": "Ground and Pound", "chapitre": "1", "pages": 29,
+CAP = {"type": "capture", "d": "serie-banc/ch_1", "titre": "Serie Banc", "chapitre": "1", "pages": 29,
        "fait": 0, "dernier_paru": True, "etape": "capture"}
 OK, KO = [], []
 
@@ -39,7 +39,7 @@ with sync_playwright() as p:
         pg.evaluate(injecte, CAP)
         pg.evaluate("() => actRafraichir()"); pg.wait_for_timeout(1500)
         check("reel : la capture fantome disparait au 1er tour", pg.evaluate("() => ACT.items.length") == 0
-              and "Ground and Pound ch.1 p." not in pg.inner_text("#actTxt"), pg.inner_text("#actTxt"))
+              and "Serie Banc ch.1 p." not in pg.inner_text("#actTxt"), pg.inner_text("#actTxt"))
         h0 = pg.evaluate("() => document.querySelector('header').getBoundingClientRect().height")
         # --- 2. panne
         etat = {"mode": "500"}
@@ -58,7 +58,7 @@ with sync_playwright() as p:
         txt = pg.inner_text("#actTxt")
         check("2 echecs : pastille « ⚠ pas à jour depuis 2 h 05 »", pg.evaluate("() => $('hdrAct').classList.contains('perime')")
               and "pas à jour depuis 2 h 05" in txt, txt)
-        check("la tache figee reste nommee (pas inventee finie)", "Ground and Pound" in txt, txt)
+        check("la tache figee reste nommee (pas inventee finie)", "Serie Banc" in txt, txt)
         check("bandeau dans le panneau", pg.is_visible("#actListe .act-perime"),
               pg.inner_text("#actListe .act-perime") if pg.locator("#actListe .act-perime").count() else "absent")
         check("info-bulle explicite", "ne répond plus" in pg.get_attribute("#hdrAct", "title"))
