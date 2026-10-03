@@ -47,7 +47,7 @@ import { APPS_STT, MAI_CLES, appDemandee, lireMoteur, etatMoteur, basculer, note
   from './stt_moteur.js';   // v1.64 : interrupteur de moteur de transcription par app + relais MAI
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.64';   // 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
+const VERSION = '1.65';   // 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
 //    // 1.63 (27/09) : retrait de la route DELETE ElevenLabs de la 1.62 -- inutile (voix de la bibliotheque utilisables sans ajout)
 // v1.59 (21/09/2026) — runSoldeWatch : sondes de SOLDE pour deepseek, moonshot-kimi, runpod, piapi
 // (les 4 fournisseurs rechargeables, jusque-la angles morts du cost watch). Voir la fonction.
@@ -287,7 +287,9 @@ async function handleFetch(request, env, ctx) {
       // ── v1.64 : interrupteur pilote depuis le dashboard (GET = etat, POST = bascule). Le bloc admin
       //    plus bas est POST-only : le GET de lecture doit passer ici. Auth ADMIN_TOKEN comme tout /admin/. ──
       if ((method === 'GET' || method === 'POST') && path === '/admin/stt-engine') {
-        const authErr = await checkBearer(request, env.ADMIN_TOKEN, 'ADMIN_TOKEN');
+        // v1.65 : DASH_STT_TOKEN = jeton du dashboard (injecte par le worker se7enai-dash derriere Access),
+        // valable sur CETTE route seulement -- le dashboard n'a pas besoin de l'ADMIN_TOKEN complet (/admin/keys/get).
+        const authErr = await checkBearer(request, [env.ADMIN_TOKEN, env.DASH_STT_TOKEN], 'ADMIN_TOKEN');
         if (authErr) return authErr;
         const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
         const rlErr = await checkRateLimit(env, ctx, 'adm', ip, RL_ADMIN_MAX);

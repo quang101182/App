@@ -56,7 +56,7 @@ async function batterie(worker) {
   const ok = (nom, cond) => res.push([nom, !!cond]);
   const env = {
     GATEWAY_KV: makeKV({ 'key:AZURE_SPEECH_KEY': 'FAUSSE-CLE-AZURE', 'key:TELEGRAM_BOT_TOKEN': 'FAUX-TOKEN' }),
-    WORKER_SECRET: 'ws-factice', ADMIN_TOKEN: 'adm-factice',
+    WORKER_SECRET: 'ws-factice', ADMIN_TOKEN: 'adm-factice', DASH_STT_TOKEN: 'dash-factice',
   };
   const scenario = { azure: 200, tg: 200 };
   const journal = { azure: [], tg: [] };
@@ -94,6 +94,16 @@ async function batterie(worker) {
      && r.json.changed && r.json.changed.source === 'banc');
   r = await appel('GET', '/api/stt-engine?app=soustitrage', { auth: ws });
   ok('les apps lisent mai2 + date', r.json.engine === 'mai2' && typeof r.json.at === 'string');
+
+  // ── v1.65 : jeton du dashboard = interrupteur SEULEMENT
+  const dash = 'dash-factice';
+  r = await appel('GET', '/admin/stt-engine?app=soustitrage', { auth: dash });
+  ok('jeton dashboard : lit l interrupteur', r.status === 200 && r.json.engine === 'mai2');
+  r = await appel('POST', '/admin/stt-engine?app=soustitrage', { auth: dash, body: JSON.stringify({ engine: 'croise', source: 'banc' }) });
+  ok('jeton dashboard : bascule mai2 -> croise', r.status === 200 && r.json.engine === 'croise');
+  r = await appel('POST', '/admin/stt-engine?app=soustitrage', { auth: dash, body: JSON.stringify({ engine: 'mai2', source: 'banc' }) });
+  r = await appel('POST', '/admin/keys/get', { auth: dash, body: JSON.stringify({ name: 'AZURE_SPEECH_KEY' }) });
+  ok('jeton dashboard REFUSE sur /admin/keys/get (401)', r.status === 401 && !r.texte.includes('FAUSSE-CLE-AZURE'));
 
   // ── relais MAI : succes
   const corps = new FormData(); corps.append('definition', '{}'); corps.append('audio', new Blob([new Uint8Array(10)]), 'a.wav');
@@ -168,6 +178,12 @@ await mutation('moteur non valide a la bascule', 'stt_moteur.js',
   'if (!Object.prototype.hasOwnProperty.call(MOTEURS, cible)) {', 'if (false) {', 'moteur inconnu refuse (400) et rien n\'est ecrit');
 await mutation('/api/mai sur le compteur commun', 'index.js',
   "mai ? 'mai' : (manga ? 'mgs' : 'api')", "(manga ? 'mgs' : 'api')", 'compteur de debit PROPRE a /api/mai');
+await mutation('jeton du dashboard accepte sur tout /admin/', 'index.js',
+  "const authErr = await checkBearer(request, env.ADMIN_TOKEN, 'ADMIN_TOKEN');",
+  "const authErr = await checkBearer(request, [env.ADMIN_TOKEN, env.DASH_STT_TOKEN], 'ADMIN_TOKEN');",
+  'jeton dashboard REFUSE sur /admin/keys/get (401)');
+await mutation('jeton du dashboard refuse sur l interrupteur', 'index.js',
+  '[env.ADMIN_TOKEN, env.DASH_STT_TOKEN]', 'env.ADMIN_TOKEN', 'jeton dashboard : lit l interrupteur');
 await mutation('defaut force a mai2 (le deploiement changerait le moteur tout seul)', 'stt_moteur.js',
   "defaut: 'croise',", "defaut: 'mai2',", 'defaut = croise (rien ne change au deploiement)');
 

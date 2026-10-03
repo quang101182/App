@@ -206,6 +206,9 @@
     .stt-plat { font-weight: 600; }
     .stt-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
       font-size: 13px; font-weight: 600; color: #fff; background: var(--pill-c, #64748b); }
+    .stt-banner.stt-croise { --stt-c: #a855f7; }
+    .stt-pill.p-croise { --pill-c: #7e22ce; }
+    .st-btns { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
     .stt-pill.p-mai { --pill-c: #15803d; } .stt-pill.p-groq { --pill-c: #2563eb; } .stt-pill.p-ko { --pill-c: #6b7280; }
     .stt-meta { font-size: 12px; opacity: .75; width: 100%; }
     .stt-meta.stt-err { color: var(--crit); opacity: 1; font-weight: 600; }
@@ -588,7 +591,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.36.0-moteur-stt';
+    const VERSION = 'v2.37.0-sous-titrage';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -617,6 +620,10 @@
       { key: 'acq', name: 'Acquisition', icon: '⌁', family: 'acquisition', auth: 'none', endpoints: {}, subtitle: 'Sites, visites, engagement et clics sortants.', sections: [] },
       // Factory : `auth: 'none'` DÉLIBÉRÉ — le token n'ouvre que ventes/abonnés, la vue doit vivre sans lui (pas de TokenGate en dur).
       // `tokenKey` est lue via getToken(cfg) : la prod réécrit la chaîne en dur à 5 endroits alors que sa config la déclare déjà.
+      // v2.37.0 — interrupteur « Sous-titrage » (SubWhisper + Télégramme Vidéo) de la passerelle PRINCIPALE.
+      // Jeton DÉDIÉ (DASH_STT_TOKEN côté api-gateway, injecté par se7enai-dash) : il n'ouvre QUE /admin/stt-engine.
+      // Ancre `#st` = le lien que la passerelle met dans son alerte Telegram de panne MAI.
+      { key: 'st', name: 'Sous-titrage', icon: '▤', family: 'ops', auth: 'none', tokenKey: 'monitoring_st_token', endpoints: {}, subtitle: 'Moteur de transcription de SubWhisper et Télégramme Vidéo — lu en direct.', sections: [] },
       { key: 'factory', name: 'Factory', icon: '▦', family: 'ops', auth: 'none', tokenKey: 'monitoring_factory_token', endpoints: {}, subtitle: 'Ebook Funnel Factory — opérations et performance.', sections: [] },
       { key: 'studio', name: 'Studio', icon: '▣', family: 'ops', auth: 'none', endpoints: {}, subtitle: 'Agenda et opérations de publication.', sections: [] }
     ];
@@ -963,6 +970,7 @@
       if (cfg.key === 'dk') return fetchDk(cfg, signal);
       if (cfg.key === 'factory') return fetchFactory(cfg, signal);
       if (cfg.key === 'studio') return fetchStudio(signal);
+      if (cfg.key === 'st') return {};   // le bandeau se lit LUI-MÊME en direct (jamais depuis le cache)
       const payload = {};
       for (const [name, endpoint] of Object.entries(cfg.endpoints || {})) {
         if (!endpoint) continue;
@@ -2267,6 +2275,76 @@
       await dkSttLoad();   // relecture réelle : on affiche ce que la passerelle DIT, pas ce qu'on a demandé
     }
 
+    // ── v2.37.0 — Onglet « Sous-titrage » ──────────────────────────────────────────────────────────
+    // MÊME composant que DictoKey (lecture en direct, confirmation, relecture après bascule), mais un
+    // menu à 5 moteurs. Une seule source : l'interrupteur `soustitrage` de la passerelle principale,
+    // commun à SubWhisper et Télégramme Vidéo (décision D3). AUCUN secours automatique (D2).
+    const ST_GATEWAY = 'https://api-gateway.quang101182.workers.dev';
+    const ST_PILL = { 'mai2': 'p-mai', 'mai2-openrouter': 'p-mai', 'croise': 'p-croise', 'gemini': 'p-croise', 'groq': 'p-groq' };
+    const ST_CLS = { 'mai2': 'stt-mai', 'mai2-openrouter': 'stt-mai', 'croise': 'stt-croise', 'gemini': 'stt-croise', 'groq': 'stt-groq' };
+    let stLabels = {};   // id -> libellé, tel que la passerelle le DIT (rien en dur qui puisse diverger)
+
+    function stPlaceholder() {
+      setTimeout(stLoad, 0);
+      return `<div id="st-banner" class="stt-banner"><div class="stt-head"><span class="stt-title">Moteur de sous-titrage</span><span class="stt-main">lecture en direct…</span></div></div>`;
+    }
+
+    async function stLoad() {
+      if (!document.getElementById('st-banner')) return;
+      const tok = getToken(getApp('st'));
+      let etat = null, erreur = null;
+      if (!tok) erreur = 'jeton absent (il est injecté par dash.se7enai.com — page ouverte hors du domaine protégé ?)';
+      else {
+        try {
+          const r = await fetch(`${ST_GATEWAY}/admin/stt-engine?app=soustitrage`, { headers: { Authorization: `Bearer ${tok}` }, cache: 'no-store' });
+          if (!r.ok) erreur = `HTTP ${r.status}`; else etat = await r.json();
+        } catch (e) { erreur = e.message || 'réseau'; }
+      }
+      const el = document.getElementById('st-banner');
+      if (el) el.outerHTML = stRender(etat, erreur);
+    }
+
+    function stRender(s, erreur) {
+      if (!s) return `<div id="st-banner" class="stt-banner stt-panne"><div class="stt-head"><span class="stt-title">Moteur de sous-titrage</span><span class="stt-main">Indisponible</span></div>`
+        + `<div class="stt-rows"><div class="stt-row"><span class="stt-meta stt-err">${safeText(erreur || 'réponse vide')}</span></div></div></div>`;
+      (s.moteurs || []).forEach(m => { stLabels[m.id] = m.label; });
+      const lib = id => stLabels[id] || id;
+      const pannes = s.errors_today || 0;
+      const cls = pannes > 0 ? 'stt-panne' : (ST_CLS[s.engine] || '');
+      const titre = pannes > 0 ? `⚠ ${pannes} panne${pannes > 1 ? 's' : ''} MAI aujourd'hui — moteur actuel : ${lib(s.engine)}` : `● ${lib(s.engine)}`;
+      const meta = [];
+      if (s.par_defaut) meta.push('par défaut (aucun choix fait au dashboard)');
+      else if (s.changed && s.changed.at) meta.push(`basculé le ${sttHeure(s.changed.at)} (${lib(s.changed.from)} → ${lib(s.changed.to)}${s.changed.source ? ', depuis ' + s.changed.source : ''})`);
+      meta.push(`pannes MAI : ${pannes} aujourd'hui · ${s.errors_yesterday || 0} hier`);
+      const err = s.last_error ? `<span class="stt-meta${pannes > 0 ? ' stt-err' : ''}">dernière erreur ${sttHeure(s.last_error.ts)} — ${safeText(String(s.last_error.status))} ${safeText(s.last_error.message || '')}</span>` : '';
+      const boutons = (s.moteurs || []).filter(m => m.id !== s.engine)
+        .map(m => `<button type="button" class="stt-btn" data-st-switch="${safeText(m.id)}">Passer sur ${safeText(m.label)}</button>`).join('');
+      return `<div id="st-banner" class="stt-banner ${cls}"><div class="stt-head"><span class="stt-title">Moteur de sous-titrage</span><span class="stt-main">${safeText(titre)}</span></div>`
+        + `<div class="stt-rows"><div class="stt-row"><span class="stt-plat">SubWhisper + Télégramme Vidéo</span>`
+        + `<span class="stt-pill ${ST_PILL[s.engine] || ''}">${safeText(lib(s.engine))}</span>`
+        + `<span class="stt-meta">${safeText(meta.join(' · '))}</span>${err}<div class="st-btns">${boutons}</div></div></div>`
+        + `<div class="stt-foot">Lu en direct · aucun secours automatique : en cas de panne MAI, Télégramme Vidéo met sa file en pause, SubWhisper affiche l'erreur, une alerte Telegram (1 par heure au plus) renvoie ici — c'est ce bouton qui bascule. `
+        + `Effet : Télégramme Vidéo à la vidéo suivante (≤ 1 min) ; SubWhisper sur les navigateurs réglés sur « Auto » dans le menu STT.</div></div>`;
+    }
+
+    async function stSwitch(cible) {
+      const actuel = document.querySelector('#st-banner .stt-pill');
+      const de = actuel ? actuel.textContent : '?';
+      if (!stLabels[cible]) return;
+      if (!confirm(`Basculer le sous-titrage de « ${de} » vers « ${stLabels[cible]} » ?\n\nEffet en moins d'une minute pour SubWhisper (navigateurs en « Auto ») et Télégramme Vidéo (à la vidéo suivante).`)) return;
+      document.querySelectorAll('#st-banner .stt-btn').forEach(b => { b.disabled = true; });
+      try {
+        const r = await fetch(`${ST_GATEWAY}/admin/stt-engine?app=soustitrage`, {
+          method: 'POST', cache: 'no-store',
+          headers: { Authorization: `Bearer ${getToken(getApp('st'))}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ engine: cible, source: 'dashboard' }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.ok || j.engine !== cible) alert(`Échec de la bascule : ${j.error || 'HTTP ' + r.status}`);
+      } catch (e) { alert(`Échec de la bascule : ${e.message}`); }
+      await stLoad();   // relecture réelle : on affiche ce que la passerelle DIT, pas ce qu'on a demandé
+    }
+
     function renderDkView(payload) {
       if (!payload || !payload.mon) return EmptyState('DictoKey', 'Aucune donnée reçue du gateway.');
       const { mon, stats, dev, visit, click, play, fb } = payload;
@@ -3062,6 +3140,7 @@
       else if (app.key === 'dkpc') content = renderDkpcView(data);
       else if (app.key === 'factory') content = renderFactoryView(data);
       else if (app.key === 'studio') content = renderStudioView(data);
+      else if (app.key === 'st') content = stPlaceholder();
       else content = renderPlaceholder(app, data);
       // UN SEUL bouton « Actualiser », partout (demande Quang 16/07) : la fresh-bar juste en dessous EST
       // un bouton cliquable en entier, et elle porte le contexte (statut + date + âge). Le bouton du header
@@ -3119,6 +3198,8 @@
       if (refreshButton) { refresh(refreshButton.dataset.refresh); return; }
       const sttButton = event.target.closest('[data-stt-switch]');   // v2.36.0
       if (sttButton) { dkSttSwitch(sttButton.dataset.sttPlat, sttButton.dataset.sttSwitch); return; }
+      const stButton = event.target.closest('[data-st-switch]');   // v2.37.0
+      if (stButton) { stSwitch(stButton.dataset.stSwitch); return; }
       // P3b2b — détail par appareil (délégation ; les clics DANS un panneau ouvert sont ignorés)
       if (event.target.closest('#dk-expand-all')) { dkExpandAllVisible(); return; }
       if (event.target.closest('#dk-collapse-all')) { dkCloseAllDevices(); return; }
