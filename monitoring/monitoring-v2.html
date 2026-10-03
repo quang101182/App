@@ -208,7 +208,20 @@
       font-size: 13px; font-weight: 600; color: #fff; background: var(--pill-c, #64748b); }
     .stt-banner.stt-croise { --stt-c: #a855f7; }
     .stt-pill.p-croise { --pill-c: #7e22ce; }
-    .st-btns { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+    .stt-lien { display: flex; gap: 14px; align-items: center; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+    .st-table { width: 100%; border-collapse: separate; border-spacing: 0 6px; font-size: 13px; }
+    .st-table th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; opacity: .65; padding: 0 10px; }
+    .st-table td { padding: 9px 10px; background: rgba(127,127,127,.08); vertical-align: middle; }
+    .st-table td:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+    .st-table td:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; text-align: right; white-space: nowrap; }
+    .st-table tr.st-actif td { background: color-mix(in srgb, var(--good) 16%, transparent); box-shadow: inset 0 2px 0 var(--good), inset 0 -2px 0 var(--good); }
+    .st-table tr.st-actif td:first-child { box-shadow: inset 2px 2px 0 var(--good), inset 0 -2px 0 var(--good); }
+    .st-table tr.st-actif td:last-child { box-shadow: inset -2px 2px 0 var(--good), inset 0 -2px 0 var(--good); }
+    .st-nom { font-weight: 600; }
+    .st-note { display: block; font-size: 12px; opacity: .7; font-weight: 400; }
+    .st-reco { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--good); color: #fff; }
+    .st-badge-actif { display: inline-block; padding: 4px 10px; border-radius: 999px; font-weight: 700; background: var(--good); color: #fff; }
+    .st-wrap { overflow-x: auto; }
     .stt-pill.p-mai { --pill-c: #15803d; } .stt-pill.p-groq { --pill-c: #2563eb; } .stt-pill.p-ko { --pill-c: #6b7280; }
     .stt-meta { font-size: 12px; opacity: .75; width: 100%; }
     .stt-meta.stt-err { color: var(--crit); opacity: 1; font-weight: 600; }
@@ -591,7 +604,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.37.0-sous-titrage';
+    const VERSION = 'v2.38.0-onglet-moteurs';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -623,7 +636,8 @@
       // v2.37.0 — interrupteur « Sous-titrage » (SubWhisper + Télégramme Vidéo) de la passerelle PRINCIPALE.
       // Jeton DÉDIÉ (DASH_STT_TOKEN côté api-gateway, injecté par se7enai-dash) : il n'ouvre QUE /admin/stt-engine.
       // Ancre `#st` = le lien que la passerelle met dans son alerte Telegram de panne MAI.
-      { key: 'st', name: 'Sous-titrage', icon: '▤', family: 'ops', auth: 'none', tokenKey: 'monitoring_st_token', endpoints: {}, subtitle: 'Moteur de transcription de SubWhisper et Télégramme Vidéo — lu en direct.', sections: [] },
+      // v2.38.0 (demande Quang 03/10) : TOUS les interrupteurs de moteur réunis ici, DictoKey compris.
+      { key: 'st', name: 'Moteurs', icon: '⇄', family: 'ops', auth: 'none', tokenKey: 'monitoring_st_token', endpoints: {}, subtitle: 'Tous les interrupteurs de transcription — DictoKey et sous-titrage, lus en direct.', sections: [] },
       { key: 'factory', name: 'Factory', icon: '▦', family: 'ops', auth: 'none', tokenKey: 'monitoring_factory_token', endpoints: {}, subtitle: 'Ebook Funnel Factory — opérations et performance.', sections: [] },
       { key: 'studio', name: 'Studio', icon: '▣', family: 'ops', auth: 'none', endpoints: {}, subtitle: 'Agenda et opérations de publication.', sections: [] }
     ];
@@ -2141,7 +2155,7 @@
 
       const note = `<div class="acq-when">Passerelle ${safeText(data.version || '?')} · usage compté côté serveur depuis la v0.4.0 (avant, la dictée PC passait par la passerelle Android et n'était comptée nulle part).</div>`;
 
-      return sttPlaceholder() + (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
+      return sttLien() + (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
         + `<section class="section"><div class="section-head"><h2>💶 Revenu &amp; abonnements</h2></div>${money}</section>`
         + `<section class="section"><div class="section-head"><h2>Usage réel · 30 jours</h2></div>${usageHtml}</section>`
         + `<section class="section"><div class="section-head"><h2>Activité par jour</h2></div>${serieHtml}</section>`
@@ -2215,6 +2229,12 @@
       return `<div id="dk-stt-banner" class="stt-banner"><div class="stt-head"><span class="stt-title">Moteur de transcription</span><span class="stt-main">lecture en direct…</span></div></div>`;
     }
 
+    // v2.38.0 — l'interrupteur vit dans l'onglet « Moteurs ». Les alertes DictoKey renvoient encore sur #dk
+    // (LIEN_DASHBOARD des 2 passerelles DictoKey, non modifiées) : ce renvoi est donc le 1er bloc de l'onglet.
+    function sttLien() {
+      return `<button type="button" class="stt-banner stt-lien" data-route="st"><span class="stt-title">Moteur de transcription</span><span>Interrupteur DictoKey (Android + PC) → onglet <b>Moteurs</b></span></button>`;
+    }
+
     async function dkSttLoad() {
       const el = document.getElementById('dk-stt-banner');
       if (!el) return;
@@ -2255,7 +2275,7 @@
       }).join('');
       return `<div id="dk-stt-banner" class="stt-banner ${cls}"><div class="stt-head"><span class="stt-title">Moteur de transcription</span><span class="stt-main">${safeText(titre)}</span></div>`
         + `<div class="stt-rows">${lignes}</div>`
-        + `<div class="stt-foot">Lu en direct · aucun secours automatique : en cas de panne, la dictée échoue et c'est ce bouton qui bascule. Restent toujours sur Groq : croate, serbe, lao, et les audios partagés hors WAV/MP3/FLAC.</div></div>`;
+        + `<div class="stt-foot"><b>MAI-Transcribe-2 (recommandé)</b> : meilleure qualité (FR 6,5 % d'erreurs contre 12 % pour Groq), 0,54 s, 0,10 $/h · <b>Groq Whisper</b> : 0,47 s, 0,04 $/h. Lu en direct · aucun secours automatique : en cas de panne, la dictée échoue et c'est ce bouton qui bascule. Restent toujours sur Groq : croate, serbe, lao, et les audios partagés hors WAV/MP3/FLAC.</div></div>`;
     }
 
     async function dkSttSwitch(plat, cible) {
@@ -2283,6 +2303,16 @@
     const ST_PILL = { 'mai2': 'p-mai', 'mai2-openrouter': 'p-mai', 'croise': 'p-croise', 'gemini': 'p-croise', 'groq': 'p-groq' };
     const ST_CLS = { 'mai2': 'stt-mai', 'mai2-openrouter': 'stt-mai', 'croise': 'stt-croise', 'gemini': 'stt-croise', 'groq': 'stt-groq' };
     let stLabels = {};   // id -> libellé, tel que la passerelle le DIT (rien en dur qui puisse diverger)
+    // Classement MESURÉ (bancs du 03/10/2026 : 46 tranches de 6 min arbitrées par ElevenLabs Scribe + 26 vidéos
+    // + 13 instrumentaux — moteur-transcription-MAI/ETAT-DES-LIEUX.md). Temps = une tranche de 6 min.
+    // ⚠ Prix MAI = offre de lancement, fin annoncée au 31/12/2026 (prix normal non publié).
+    const ST_INFOS = {
+      'mai2':            { qualite: '★★★', qNote: 'entend le plus (2 % de parole manquée), n\'invente rien sur musique', temps: '3,5 s', prix: '0,10 $/h', reco: true },
+      'mai2-openrouter': { qualite: '★★★', qNote: 'même moteur, mais erreurs 429/502 fréquentes : secours seulement', temps: '9 s', prix: '0,10 $/h' },
+      'croise':          { qualite: '★★', qNote: 'Gemini, et Groq quand Gemini reste muet', temps: '12 s', prix: '≈ 0,30 $/h' },
+      'gemini':          { qualite: '★', qNote: 'perd ~15 % de la parole, boucles de répétition', temps: '11 s', prix: '0,30 $/h' },
+      'groq':            { qualite: '★', qNote: 'invente du texte sur musique et silence (13 instrumentaux sur 13)', temps: '3,2 s', prix: '0,04 $/h' },
+    };
 
     function stPlaceholder() {
       setTimeout(stLoad, 0);
@@ -2317,18 +2347,21 @@
       else if (s.changed && s.changed.at) meta.push(`basculé le ${sttHeure(s.changed.at)} (${lib(s.changed.from)} → ${lib(s.changed.to)}${s.changed.source ? ', depuis ' + s.changed.source : ''})`);
       meta.push(`pannes MAI : ${pannes} aujourd'hui · ${s.errors_yesterday || 0} hier`);
       const err = s.last_error ? `<span class="stt-meta${pannes > 0 ? ' stt-err' : ''}">dernière erreur ${sttHeure(s.last_error.ts)} — ${safeText(String(s.last_error.status))} ${safeText(s.last_error.message || '')}</span>` : '';
-      const boutons = (s.moteurs || []).filter(m => m.id !== s.engine)
-        .map(m => `<button type="button" class="stt-btn" data-st-switch="${safeText(m.id)}">Passer sur ${safeText(m.label)}</button>`).join('');
-      return `<div id="st-banner" class="stt-banner ${cls}"><div class="stt-head"><span class="stt-title">Moteur de sous-titrage</span><span class="stt-main">${safeText(titre)}</span></div>`
-        + `<div class="stt-rows"><div class="stt-row"><span class="stt-plat">SubWhisper + Télégramme Vidéo</span>`
-        + `<span class="stt-pill ${ST_PILL[s.engine] || ''}">${safeText(lib(s.engine))}</span>`
-        + `<span class="stt-meta">${safeText(meta.join(' · '))}</span>${err}<div class="st-btns">${boutons}</div></div></div>`
-        + `<div class="stt-foot">Lu en direct · aucun secours automatique : en cas de panne MAI, Télégramme Vidéo met sa file en pause, SubWhisper affiche l'erreur, une alerte Telegram (1 par heure au plus) renvoie ici — c'est ce bouton qui bascule. `
-        + `Effet : Télégramme Vidéo à la vidéo suivante (≤ 1 min) ; SubWhisper sur les navigateurs réglés sur « Auto » dans le menu STT.</div></div>`;
+      const lignes = (s.moteurs || []).map(m => {
+        const i = ST_INFOS[m.id] || {}, actif = m.id === s.engine;
+        return `<tr class="${actif ? 'st-actif' : ''}"><td><span class="st-nom">${safeText(m.label)}</span>${i.reco ? '<span class="st-reco">recommandé</span>' : ''}<span class="st-note">${safeText(i.qNote || '')}</span></td>`
+          + `<td>${safeText(i.qualite || '?')}</td><td>${safeText(i.temps || '?')}</td><td>${safeText(i.prix || '?')}</td>`
+          + `<td>${actif ? '<span class="st-badge-actif">● ACTIF</span>' : `<button type="button" class="stt-btn" data-st-switch="${safeText(m.id)}">Choisir</button>`}</td></tr>`;
+      }).join('');
+      return `<div id="st-banner" class="stt-banner ${cls}"><div class="stt-head"><span class="stt-title">Sous-titrage · SubWhisper + Télégramme Vidéo</span><span class="stt-main">${safeText(titre)}</span></div>`
+        + `<div class="stt-meta">${safeText(meta.join(' · '))}</div>${err}`
+        + `<div class="st-wrap"><table class="st-table"><thead><tr><th>Moteur</th><th>Qualité</th><th>Temps (6 min)</th><th>Prix</th><th></th></tr></thead><tbody>${lignes}</tbody></table></div>`
+        + `<div class="stt-foot">Classement mesuré le 03/10/2026 (prix MAI : offre de lancement jusqu'au 31/12/2026). Lu en direct · aucun secours automatique : en cas de panne MAI, Télégramme Vidéo met sa file en pause, SubWhisper affiche l'erreur, une alerte Telegram (1 par heure au plus) renvoie ici. `
+        + `Effet d'une bascule : Télégramme Vidéo à la vidéo suivante (≤ 1 min) ; SubWhisper sur les navigateurs réglés sur « Auto » dans le menu STT.</div></div>`;
     }
 
     async function stSwitch(cible) {
-      const actuel = document.querySelector('#st-banner .stt-pill');
+      const actuel = document.querySelector('#st-banner tr.st-actif .st-nom');
       const de = actuel ? actuel.textContent : '?';
       if (!stLabels[cible]) return;
       if (!confirm(`Basculer le sous-titrage de « ${de} » vers « ${stLabels[cible]} » ?\n\nEffet en moins d'une minute pour SubWhisper (navigateurs en « Auto ») et Télégramme Vidéo (à la vidéo suivante).`)) return;
@@ -2487,7 +2520,7 @@
       const donuts = `<div class="donut-grid"><div><div class="chart-title">Langues dictées</div><div class="chart-box donut"><canvas id="dk-chart-lang"></canvas></div></div>`
         + `<div><div class="chart-title">Top pays actifs</div><div class="chart-box donut"><canvas id="dk-chart-country"></canvas></div></div></div>`;
 
-      return sttPlaceholder() + trend + silent
+      return sttLien() + trend + silent
         + `<section class="section">${kpis}</section>`
         + `<section class="section">${Panel('dk-site', '🌐 Funnel site → Play Store', siteFunnel, true)}</section>`
         + `<section class="section">${Panel('dk-play', '📥 Play Store — adoption & activité', psHtml, true)}</section>`
@@ -3140,7 +3173,7 @@
       else if (app.key === 'dkpc') content = renderDkpcView(data);
       else if (app.key === 'factory') content = renderFactoryView(data);
       else if (app.key === 'studio') content = renderStudioView(data);
-      else if (app.key === 'st') content = stPlaceholder();
+      else if (app.key === 'st') content = sttPlaceholder() + stPlaceholder();
       else content = renderPlaceholder(app, data);
       // UN SEUL bouton « Actualiser », partout (demande Quang 16/07) : la fresh-bar juste en dessous EST
       // un bouton cliquable en entier, et elle porte le contexte (statut + date + âge). Le bouton du header
