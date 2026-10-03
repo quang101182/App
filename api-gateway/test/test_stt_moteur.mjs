@@ -40,7 +40,7 @@ function installerFetch(scenario, journal) {
       journal.azure.push({ url: u, cle: new Headers(init.headers).get('Ocp-Apim-Subscription-Key') });
       if (scenario.azure === 'throw') throw new Error('reseau coupe');
       const st = scenario.azure;
-      return new Response(JSON.stringify(st === 200 ? { combinedPhrases: [{ text: 'ok' }] } : { error: 'boom' }),
+      return new Response(JSON.stringify(st === 200 ? { durationMilliseconds: 360000, combinedPhrases: [{ text: 'ok' }] } : { error: 'boom' }),
         { status: st, headers: { 'content-type': 'application/json' } });
     }
     if (u.includes('api.telegram.org')) {
@@ -112,6 +112,8 @@ async function batterie(worker) {
   ok('cle Azure injectee cote serveur + bon chemin',
      journal.azure.at(-1).cle === 'FAUSSE-CLE-AZURE' && journal.azure.at(-1).url.includes('/speechtotext/transcriptions:transcribe?api-version=2025-10-15'));
   ok('succes = aucun compteur de panne', !env.GATEWAY_KV.store.has(`stt:err:soustitrage:${jour()}`));
+  ok('succes = 360 s comptees (jour + mois)', env.GATEWAY_KV.store.get(`stt:sec:soustitrage:${jour()}`) === '360.0'
+     && env.GATEWAY_KV.store.get(`stt:sec:soustitrage:${jour().slice(0, 7)}`) === '360.0');
   ok('compteur de debit PROPRE a /api/mai', [...env.GATEWAY_KV.store.keys()].some((k) => k.startsWith('rl:mai:')));
 
   // ── v1.66 (P5.4) : un 400 = la requete, PAS une panne -> ni compteur ni alerte
@@ -144,6 +146,7 @@ async function batterie(worker) {
 
   // ── l'admin voit la panne
   r = await appel('GET', '/admin/stt-engine?app=soustitrage', { auth: adm });
+  ok('admin voit les secondes MAI du mois + prix', r.json.mai_secondes_mois === 360 && r.json.mai_prix_heure === 0.1);
   ok('admin voit pannes du jour + derniere erreur', r.json.errors_today === 5 && r.json.last_error && r.json.engine === 'mai2');
   return res;
 }
@@ -192,6 +195,8 @@ await mutation('jeton du dashboard refuse sur l interrupteur', 'index.js',
   '[env.ADMIN_TOKEN, env.DASH_STT_TOKEN]', 'env.ADMIN_TOKEN', 'jeton dashboard : lit l interrupteur');
 await mutation('un 400 compte comme panne', 'stt_moteur.js',
   'return status >= 500 ||', 'return status >= 400 ||', '400 (fichier/langue/modele refuses) relaye, mais NI panne NI alerte');
+await mutation('secondes non comptees', 'index.js',
+  "compterSecondes(env.GATEWAY_KV, app, j && j.durationMilliseconds)", "null", 'succes = 360 s comptees (jour + mois)');
 await mutation('defaut force a mai2 (le deploiement changerait le moteur tout seul)', 'stt_moteur.js',
   "defaut: 'croise',", "defaut: 'mai2',", 'defaut = croise (rien ne change au deploiement)');
 

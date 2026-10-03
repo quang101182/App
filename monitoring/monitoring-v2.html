@@ -604,7 +604,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.38.1-onglet-moteurs';
+    const VERSION = 'v2.39.0-cout-mai';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -2346,6 +2346,12 @@
       if (s.par_defaut) meta.push('par défaut (aucun choix fait au dashboard)');
       else if (s.changed && s.changed.at) meta.push(`basculé le ${sttHeure(s.changed.at)} (${lib(s.changed.from)} → ${lib(s.changed.to)}${s.changed.source ? ', depuis ' + s.changed.source : ''})`);
       meta.push(`pannes MAI : ${pannes} aujourd'hui · ${s.errors_yesterday || 0} hier`);
+      // v2.39.0 (P5.3) : coût MAI réel, compté par la passerelle depuis les secondes facturées par Azure
+      if (typeof s.mai_secondes_mois === 'number') {
+        const duree = sec => sec >= 3600 ? `${Math.floor(sec / 3600)} h ${String(Math.round(sec % 3600 / 60)).padStart(2, '0')}` : `${Math.round(sec / 60)} min`;
+        const cout = sec => (sec / 3600 * (s.mai_prix_heure || 0)).toFixed(2).replace('.', ',') + ' $';
+        meta.push(`MAI ce mois : ${duree(s.mai_secondes_mois)} ≈ ${cout(s.mai_secondes_mois)} (aujourd'hui ${duree(s.mai_secondes_jour || 0)})`);
+      }
       const err = s.last_error ? `<span class="stt-meta${pannes > 0 ? ' stt-err' : ''}">dernière erreur ${sttHeure(s.last_error.ts)} — ${safeText(String(s.last_error.status))} ${safeText(s.last_error.message || '')}</span>` : '';
       const lignes = (s.moteurs || []).map(m => {
         const i = ST_INFOS[m.id] || {}, actif = m.id === s.engine;

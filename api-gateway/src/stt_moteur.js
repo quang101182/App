@@ -60,9 +60,10 @@ export async function lireMoteur(kv, app) {
 
 /** État complet affiché par le dashboard (GET /admin/stt-engine). */
 export async function etatMoteur(kv, app) {
-  const [brut, meta, last, eAuj, eHier] = await Promise.all([
+  const [brut, meta, last, eAuj, eHier, sJour, sMois] = await Promise.all([
     kv.get(`cfg:stt_engine:${app}`), kv.get(`cfg:stt_engine_meta:${app}`, 'json'),
     kv.get(`stt:last_error:${app}`, 'json'), kv.get(`stt:err:${app}:${jourIso()}`), kv.get(`stt:err:${app}:${jourIso(1)}`),
+    kv.get(`stt:sec:${app}:${jourIso()}`), kv.get(`stt:sec:${app}:${jourIso().slice(0, 7)}`),
   ]);
   const engine = Object.prototype.hasOwnProperty.call(MOTEURS, brut) ? brut : APPS_STT[app].defaut;
   return {
@@ -70,6 +71,8 @@ export async function etatMoteur(kv, app) {
     configured: brut, par_defaut: brut === null || !(brut in MOTEURS),
     changed: meta || null, last_error: last || null,
     errors_today: parseInt(eAuj || '0', 10), errors_yesterday: parseInt(eHier || '0', 10),
+    // P5.3 : secondes d'audio facturées par Azure via /api/mai (estimation : compteur KV sans verrou)
+    mai_secondes_jour: parseFloat(sJour || '0'), mai_secondes_mois: parseFloat(sMois || '0'), mai_prix_heure: MAI_PRIX_HEURE,
     moteurs: Object.entries(MOTEURS).map(([id, label]) => ({ id, label })),
   };
 }
@@ -87,6 +90,23 @@ export async function basculer(kv, app, corps) {
     source: String((corps && corps.source) || 'dashboard').slice(0, 40),
   }));
   return { status: 200, body: { ok: true, changed_from: avant, ...(await etatMoteur(kv, app)) } };
+}
+
+/** Prix MAI facturé (offre de lancement, fin annoncée au 31/12/2026 — rappel P5.2 le 01/11). */
+export const MAI_PRIX_HEURE = 0.10;
+
+/** P5.3 — compte les secondes facturées (durationMilliseconds de la réponse Azure), par jour et par mois.
+ *  Lecture-écriture sans verrou : des appels simultanés peuvent perdre un incrément → c'est une ESTIMATION
+ *  (par défaut, jamais par excès). Best-effort, ne jette jamais. */
+export async function compterSecondes(kv, app, ms) {
+  const sec = Number(ms) / 1000;
+  if (!(sec > 0)) return;
+  try {
+    for (const [k, ttl] of [[`stt:sec:${app}:${jourIso()}`, 3 * 86400], [`stt:sec:${app}:${jourIso().slice(0, 7)}`, 400 * 86400]]) {
+      const v = parseFloat((await kv.get(k)) || '0') + sec;
+      await kv.put(k, v.toFixed(1), { expirationTtl: ttl });
+    }
+  } catch { /* un compteur raté ne doit jamais casser une transcription */ }
 }
 
 /** P5.4 — une réponse MAI est-elle une PANNE (compteur + alerte) ? Oui : 5xx, clé refusée (401/403), quota (429).

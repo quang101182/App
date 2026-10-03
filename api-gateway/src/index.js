@@ -43,11 +43,11 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { APPS_STT, MAI_CLES, estPanneMai, appDemandee, lireMoteur, etatMoteur, basculer, noterPanne, alerterPanne, cibleMai }
+import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMoteur, etatMoteur, basculer, noterPanne, alerterPanne, cibleMai }
   from './stt_moteur.js';   // v1.64 : interrupteur de moteur de transcription par app + relais MAI
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.66';   // 1.66 (03/10) : seuls 5xx/401/403/429/reseau comptent comme panne MAI (un 400 = la requete, pas MAI). 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
+const VERSION = '1.67';   // 1.67 (03/10) : secondes MAI facturees comptees par app (jour + mois), lues au dashboard. 1.66 (03/10) : seuls 5xx/401/403/429/reseau comptent comme panne MAI (un 400 = la requete, pas MAI). 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
 //    // 1.63 (27/09) : retrait de la route DELETE ElevenLabs de la 1.62 -- inutile (voix de la bibliotheque utilisables sans ajout)
 // v1.59 (21/09/2026) — runSoldeWatch : sondes de SOLDE pour deepseek, moonshot-kimi, runpod, piapi
 // (les 4 fournisseurs rechargeables, jusque-la angles morts du cost watch). Voir la fonction.
@@ -788,6 +788,10 @@ async function proxyMai(request, env, ctx) {
   if (estPanneMai(res.status)) {
     const copie = res.clone();
     ctx.waitUntil(copie.text().catch(() => '').then((t) => panne(res.status, t.slice(0, 200))));
+  } else if (res.ok) {
+    // v1.67 (P5.3) : secondes facturees, lues dans la reponse (pas devinees depuis la taille du fichier)
+    const copie = res.clone();
+    ctx.waitUntil(copie.json().then((j) => compterSecondes(env.GATEWAY_KV, app, j && j.durationMilliseconds)).catch(() => {}));
   }
   return res;
 }
