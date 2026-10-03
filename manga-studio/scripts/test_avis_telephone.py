@@ -93,7 +93,7 @@ try:
     pg = next((x for x in ctx.pages if ("localhost:%d/manga" % PORT) in x.url), None)
     check("page de l'app ouverte sur le telephone", pg is not None, [x.url.split("#")[0][:60] for x in ctx.pages])   # jamais le #k= (la cle)
     pg.wait_for_function("() => typeof VERSION !== 'undefined'", timeout=30000)
-    check("v3.7.0 servie", pg.evaluate("() => VERSION") == "3.7.0", pg.evaluate("() => VERSION"))
+    check("v3.7.x servie", pg.evaluate("() => VERSION").startswith("3.7."), pg.evaluate("() => VERSION"))
     s = ctx.new_cdp_session(pg)
     s.send("Browser.grantPermissions", {"origin": "http://localhost:%d" % PORT, "permissions": ["notifications"]})
     pg.wait_for_function("() => !document.getElementById('hdrAvisL').hidden", timeout=20000)
