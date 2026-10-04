@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.9.0"  # 0.9.0 (28/09) : page par page, une page EN DOUBLE dans la galerie = le lecteur avance (plus « fin » apres 5 doublons) ; compteur « N / M » lu avant de conclure (cale = rechargement, sinon ECHEC ecrit) ; 0.8.9 (28/09) : pages « /s/<cle>/<galerie>-<page> » = une seule galerie ; 0.8.8 (28/09) : 1re page du chapitre suivant retiree de la fin du precedent ; 0.8.7 (28/09) : enchainement « meme adresse au n° pres » ; 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
+VERSION = "0.9.1"  # 0.9.1 (04/10) : chapitre_path sans barre finale (volume Mangas Origines : « chapitre quitte » des la page 2) ; 0.9.0 (28/09) : page par page, une page EN DOUBLE dans la galerie = le lecteur avance (plus « fin » apres 5 doublons) ; compteur « N / M » lu avant de conclure (cale = rechargement, sinon ECHEC ecrit) ; 0.8.9 (28/09) : pages « /s/<cle>/<galerie>-<page> » = une seule galerie ; 0.8.8 (28/09) : 1re page du chapitre suivant retiree de la fin du precedent ; 0.8.7 (28/09) : enchainement « meme adresse au n° pres » ; 0.8.6 (28/09) : page dans l'adresse (/p/N/, /page/N/) != chapitre suivant ;  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -438,6 +438,13 @@ RE_PAGE_GALERIE = re.compile(r"/s/[0-9a-f]{6,16}/(\d+)-\d+/?$", re.I)  # 0.8.9 :
 
 
 def chapitre_path(u: str) -> str:
+    """0.9.1 (04/10, Mangas Origines) : resultat SANS barre finale. « …/volume-1/ » (depart, garde tel quel) contre
+    « …/volume-1 » (page 2, apres retrait de « /p/2/ ») : la capture croyait avoir change de chapitre des la page 2
+    (1 page capturee, ECHEC). Les deux cotes d'une comparaison sont desormais ecrits pareil."""
+    return _chapitre_path_brut(u).rstrip("/")
+
+
+def _chapitre_path_brut(u: str) -> str:
     """Chemin reduit a l'identifiant de CHAPITRE (sans le numero de PAGE final). 0.8.6 : sorti de capture() pour etre teste.
     1. « /p/N/ », « /page/N/ », « /page-N/ » en fin d'adresse = une PAGE (lecteurs qui changent l'adresse au defilement).
     2. MangaDex : /chapter/<uuid 36>/<n> -- ne retirer le segment numerique final QUE s'il suit un segment long non

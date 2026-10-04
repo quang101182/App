@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Banc v2.77.0 : numero de chapitre SUGGERE d'apres l'adresse de la page (chapDeLaPage, v2.64.0). Tableau d'adresses
-(formats connus + volume entier « vol-N » ajoute en v2.77.0) : aucune regression sur les anciens formats. APP REELLE, lecture seule.
+(formats connus + volume entier « vol-N » ajoute en v2.77.0 + « volume-N » / « tome-N » et nom nettoye en v3.7.2) : aucune regression sur les anciens formats. APP REELLE, lecture seule.
 Usage : python test_num_adresse_ui.py [port] [--mutation]   (--mutation : app v2.76.0 servie -> doit sortir ROUGE)
 """
 import os, sys
@@ -23,6 +23,17 @@ CAS = [   # (adresse, titre de l'onglet, numero attendu)
     ("https://site.example/x/chapter-1-ch265736/", "", "1"),
     ("https://mangadex.org/chapter/3f9b2c1e-1111-2222-3333-444455556666", "Chapter 143 - Solo", "143"),  # uuid : pas un numero
     ("https://site.example/manga/volcano-hero/", "", ""),                                           # « vol » dans un nom : rien
+    ("https://mangas-origines.fr/oeuvre/berserk/volume-1/", "Lire Berserk Scan FR - Mangas Origines", "1"),   # v3.7.2 (Quang 04/10)
+    ("https://mangas-origines.fr/oeuvre/berserk/volume-1/p/2/", "Lire Berserk Scan FR - Mangas Origines", "1"),  # page 2 du volume 1
+    ("https://mangas-origines.fr/oeuvre/berserk/volume-42/", "", "42"),
+    ("https://site.example/manga/x/tome-03/", "", "3"),
+    ("https://mangas-origines.fr/oeuvre/berserk/", "Berserk Scan FR - Mangas Origines", ""),       # page de la serie : rien
+]
+NOMS = [   # v3.7.2 : nom propose d'apres le titre de l'onglet (habillage du site retire)
+    ("Lire Berserk Scan FR - Mangas Origines", "Berserk"),
+    ("Lire One Punch-Man Chapitre 12 - Site", "One Punch-Man"),
+    ("Reading the Room Scan FR - Site", "Reading the Room"),                 # « Reading » fait partie du titre : intact
+    ("Vinland Saga Manga VF - Site", "Vinland Saga"),
 ]
 OK, KO = [], []
 def check(nom, cond, detail=""):
@@ -40,6 +51,10 @@ with sync_playwright() as p:
     for url, titre, attendu in CAS:
         n = pg.evaluate("([url, title]) => chapDeLaPage({ url, title })", [url, titre])
         check("%-62s → « %s »" % (url.split("//")[1][:62], attendu), n == attendu, "obtenu « %s »" % n)
+    if not MUT:
+        for titre, attendu in NOMS:
+            n = pg.evaluate("(t) => nomSansHabillage(devinerTitre(t).titre)", titre)
+            check("nom « %s »" % titre, n == attendu, "obtenu « %s »" % n)
     check("aucune erreur JS", not errs, errs[:3])
     b.close()
 print("\nVERDICT : %d OK / %d KO" % (len(OK), len(KO)))
