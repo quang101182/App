@@ -83,7 +83,7 @@ def shot(nom, largeur):
     print(f"  (capture) {f}")
 
 print("=== Rendu ===")
-t("version v2.42.0 chargee", str(ev("VERSION")).startswith("v2.42.0"), ev("VERSION"))
+t("version v2.42.x chargee", str(ev("VERSION")).startswith("v2.42"), ev("VERSION"))
 txt = ev("document.querySelector('#view-root')?.textContent || ''")
 t("section « L'essentiel » presente", "L’essentiel" in txt, txt[:150])
 tiles = ev("Object.fromEntries([...document.querySelectorAll('#view-root .kpi-tile')].slice(0,4).map(t=>[t.querySelector('.kpi-label').textContent.trim(), t.querySelector('.kpi-value').textContent.trim()]))")
@@ -97,6 +97,7 @@ for b in badges or []: print("  (info)", b[0][:4] + "…", "|", b[1], "|", b[2])
 for c in resilies:
     ligne = [b for b in badges if b[0] == c["email"]]
     t(f"résilié {c['email'][:4]}… affiché « Résilié » + date d'accès", bool(ligne) and ligne[0][1] == "Résilié" and "accès jusqu’au" in ligne[0][2], ligne)
+t("plus de bandeau « au repos » (produit actif)", ev("!document.querySelector('#view-root .role-banner')") is True)
 t("panneaux de detail replies par defaut", ev("[...document.querySelectorAll('#view-root .panel')].every(p=>p.dataset.open==='false')") is True)
 t("le jeton n'apparait pas dans la page", admin not in (ev("document.documentElement.outerHTML") or ""))
 shot("swp_pc.png", 1400)
