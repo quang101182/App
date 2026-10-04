@@ -171,6 +171,20 @@
     .health.h-ok .hdot { background: var(--good); }
     .health.h-trial .hdot { background: var(--warn); opacity: .6; }
     .health.h-rev .hdot, .health.h-test .hdot { background: var(--ink-faint); }
+    /* v2.42.0 — SubWhisper Pro : liste « clients en cours » compacte (1 ligne PC, 1 carte mobile) */
+    .badge.cancel { border-color: rgba(245,181,46,.55); background: rgba(245,181,46,.16); color: #f3ce7d; }
+    .badge.risk { border-color: rgba(239,68,68,.5); background: rgba(239,68,68,.14); color: #f5a3a3; }
+    .cl-list { display: flex; flex-direction: column; gap: 8px; }
+    .cl-row { display: grid; grid-template-columns: minmax(0, 2.2fr) auto minmax(0, 1.2fr) minmax(0, 1.6fr); align-items: center; gap: 14px; padding: 12px 15px; border: 1px solid var(--line); border-left: 3px solid var(--cl-color, var(--line-strong)); border-radius: var(--radius-sm); background: var(--surface); }
+    .cl-who { min-width: 0; color: var(--ink); font-weight: 650; overflow-wrap: anywhere; }
+    .cl-who small { display: block; margin-top: 1px; color: var(--ink-faint); font-size: .7rem; font-weight: 500; }
+    .cl-cell { color: var(--ink-muted); font-size: .74rem; line-height: 1.35; }
+    .cl-cell strong { display: block; color: var(--ink); font-size: .84rem; font-variant-numeric: tabular-nums; }
+    @media (max-width: 620px) {
+      .cl-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 12px; padding: 11px 12px; }
+      .cl-row .cl-who { grid-column: 1 / -1; }
+      .cl-row .badge { grid-column: 1 / -1; justify-self: start; }
+    }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
     .data-table { width: 100%; border-collapse: collapse; font-size: .8rem; white-space: nowrap; }
     .data-table th { padding: 10px 12px; border-bottom: 1px solid var(--line-strong); color: var(--ink-faint); text-align: left; font-size: .66rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
@@ -604,7 +618,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.41.1-jarvis-moteur';
+    const VERSION = 'v2.42.0-swp-essentiel';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1249,6 +1263,7 @@
     function swpIsTest(email) { return /@(test|example)\./i.test(String(email || '')); }
     function svIsInternal(email) { const e = String(email || '').toLowerCase(); return !e || e.endsWith('@local') || e === 'quangapps.dev@gmail.com' || swpIsTest(e); }
     function swpDaysSince(iso) { if (!iso) return null; const d = new Date(iso); if (isNaN(d.getTime())) return null; return Math.floor((Date.now() - d.getTime()) / 86400000); }
+    function swpShortDate(iso) { if (!iso) return '—'; const d = new Date(iso); if (isNaN(d.getTime())) return '—'; return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }); }
     function swpPct(num, den) { if (!den || den <= 0) return '—'; return (Math.round((num / den) * 1000) / 10) + '%'; }
     function swpFmtDate(iso) { if (!iso) return '<span class="muted">—</span>'; const d = new Date(iso); if (isNaN(d.getTime())) return '<span class="muted">—</span>'; return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; }
     function swpFmtRelative(iso) {
@@ -1950,8 +1965,6 @@
         if (inactiveOnly > 0) reasons.push(`${inactiveOnly} inactif(s) >14j`);
         const who = atRisk.slice(0, 3).map(c => c.email).join(', ') + (atRisk.length > 3 ? ' …' : '');
         alertHtml = Alert('critique', `${atRisk.length} abonné(s) à risque`, `${reasons.join(' · ')} → à relancer : ${who}`);
-      } else if (payants.length > 0) {
-        alertHtml = Alert('ok', 'Aucun payant à risque', `les ${payants.length} abonnement(s) actif(s) ont une activité récente.`);
       }
 
       // v2.30.0 — deux avertissements qui ne remplacent pas le bandeau ci-dessus, ils s'y ajoutent.
@@ -1962,6 +1975,9 @@
       }
       const dups = (data.duplicate_suspects || { by_normalized_email: [], by_ip_hash: [] });
       const dupGroups = [].concat(dups.by_normalized_email || [], dups.by_ip_hash || [])
+        // v2.42.0 — les comptes de test (@test., @example.) sont retirés du groupe : ils partageaient l'IP de
+        // Quang et faisaient sonner l'alerte sur des essais internes.
+        .map(g => Object.assign({}, g, { emails: (g.emails || []).filter(e => !swpIsTest(e)) }))
         .filter(g => new Set(g.emails).size > 1);   // deux clés d'un même email = un doublon technique connu, pas un abus
       if (dupGroups.length > 0) {
         alertHtml += Alert('attention', `${dupGroups.length} groupe(s) de comptes multiples`,
@@ -1969,71 +1985,83 @@
           + ' — plusieurs essais ouverts par la même personne. Signalé, jamais bloqué automatiquement.');
       }
 
-      const payantsSub = `${payants.length} abonnement(s) Polar « active » CONSTATÉ(S)`
-        + (payantsSupposes.length > 0 ? ` · ${payantsSupposes.length} supposé(s), non compté(s)` : '')
-        + (resilies.length > 0 ? ` · ${resilies.length} résilié(s) en cours` : '')
-        + (pastDue.length > 0 ? ` · ${pastDue.length} paiement échoué` : '')
-        + (orphanPro.length > 0 ? ` · ${orphanPro.length} clé orpheline` : '');
-      const money = `<div class="kpi-grid">`
-        + KpiTile('💶 MRR réel', `${mrr} €`, `${payants.length} abonnement(s) Polar « active » constaté(s) × ${SWP_PRICE_EUR}€ (prix liste)`
-            + (payantsSupposes.length > 0 ? ` — ${payantsSupposes.length} statut supposé exclu(s)` : '')
-            + (trialsActifs.length > 0 ? ` · ${trialsActifs.length} essai(s) gratuit(s) en cours, hors MRR` : ''))
-        + KpiTile('💳 Payants actifs', payants.length, payantsSub)
-        + KpiTile('⚠️ À risque', atRisk.length, 'payé jamais utilisé / inactif >14j / paiement en échec')
-        + KpiTile('📉 Churn', swpPct(revokedReal.length, real.length), `${revokedReal.length} révoqués / ${real.length} clients réels (cumulé, pas mensuel)`)
+      // v2.42.0 (04/10/2026) — refonte « l'essentiel d'abord » (demande Quang : pas 40 000 infos).
+      // Écran 1 = 4 chiffres + alertes actionnables + clients EN COURS avec leur échéance.
+      // Le reste (funnel, usage, anciens clients) passe dans des panneaux repliés.
+      const finAcces = c => c.endsAt || c.expiresAt || c.renewsAt || null;
+      const prochaineFin = resilies.map(finAcces).filter(Boolean).sort()[0];
+      const essaisNonResilies = trialsActifs.filter(c => !c.cancelAtPeriodEnd);
+      const top = `<div class="kpi-grid">`
+        + KpiTile('💶 Revenu mensuel', `${mrr} €`, payants.length ? `${payants.length} abonné(s) payant(s) × ${SWP_PRICE_EUR} €` : 'aucun abonné payant pour le moment')
+        + KpiTile('💳 Payants', payants.length, payantsSupposes.length ? `+ ${payantsSupposes.length} non confirmé(s), non compté(s)` : 'confirmés par Polar')
+        + KpiTile('🎁 Essais en cours', essaisNonResilies.length, essaisNonResilies.length ? 'peuvent devenir payants' : 'aucun essai en cours')
+        + KpiTile('🚪 Résiliations', resilies.length, resilies.length ? `accès jusqu’au ${swpShortDate(prochaineFin)}${resilies.length > 1 ? ' (la plus proche)' : ''}` : 'aucune en cours')
         + `</div>`;
 
+      // Clients en cours (non révoqués, hors test) — un statut lisible + son échéance.
+      function clStatut(c) {
+        if (c._h.rank === 0) return { badge: 'risk', label: 'Payé · jamais utilisé', color: 'var(--crit)', ech: 'renouvelle le', date: c.renewsAt };
+        if (c.lsStatus === 'past_due' || c.lsStatus === 'unpaid') return { badge: 'risk', label: 'Paiement échoué', color: 'var(--crit)', ech: 'échéance', date: c.renewsAt };
+        if (c.cancelAtPeriodEnd) return { badge: 'cancel', label: 'Résilié', color: 'var(--warn)', ech: 'accès jusqu’au', date: finAcces(c) };
+        if (c.plan === 'trial') return { badge: 'trial', label: 'Essai', color: 'rgba(245,181,46,.55)', ech: 'fin d’essai', date: c.expiresAt || c.renewsAt };
+        if (c.lsStatus === 'not_found') return { badge: 'orphan', label: 'Clé sans abonnement', color: 'var(--ink-faint)', ech: 'abonnement Polar', date: null };
+        if (c.lsStatusAssumed) return { badge: 'pro', label: 'Pro · non confirmé', color: 'var(--warn)', ech: 'renouvelle le', date: c.renewsAt };
+        if (c._h.rank === 1) return { badge: 'risk', label: c._h.label, color: 'var(--crit)', ech: 'renouvelle le', date: c.renewsAt };
+        return { badge: 'pro', label: 'Pro', color: 'var(--good)', ech: 'renouvelle le', date: c.renewsAt };
+      }
+      const enCours = real.filter(c => !c.revoked).map(c => Object.assign(c, { _s: clStatut(c) }));
+      const ordre = { risk: 0, cancel: 1, pro: 2, trial: 3, orphan: 4 };
+      enCours.sort((a, b) => (ordre[a._s.badge] - ordre[b._s.badge]) || String(b.created || '').localeCompare(String(a.created || '')));
+      const listeEnCours = enCours.length
+        ? `<div class="cl-list">` + enCours.map(c => {
+            const st = c._s, um = c.usageMonth || {};
+            const usage = (um.transcriptions || 0) + (um.translations || 0)
+              ? `${um.transcriptions || 0} transcr. · ${um.translations || 0} trad. ce mois` : 'aucun usage ce mois';
+            return `<article class="cl-row" style="--cl-color:${st.color}">`
+              + `<div class="cl-who">${safeText(c.email)}<small>client depuis le ${swpShortDate(c.created)}</small></div>`
+              + `<span class="badge ${st.badge}">${safeText(st.label)}</span>`
+              + `<div class="cl-cell">${safeText(st.ech)}<strong>${swpShortDate(st.date)}</strong></div>`
+              + `<div class="cl-cell" title="${safeText(c.lastUsed || '')}">vu ${swpFmtRelative(c.lastUsed)}<strong>${safeText(usage)}</strong></div>`
+              + `</article>`;
+          }).join('') + `</div>`
+        : `<div class="empty">Aucun client en cours.</div>`;
+
+      // ── Détails repliés ──
       const vTot = visits.total || 0;
       const funnel = `<div class="funnel">`
-        + FunnelBar('👁 Visites', vTot, 100)
-        + FunnelBar(`👥 Clients réels — ${swpPct(real.length, vTot)}`, real.length, vTot ? Math.max(2, Math.round((real.length / vTot) * 100)) : 0)
+        + FunnelBar('👁 Visites du site', vTot, 100)
+        + FunnelBar(`👥 Clients (essai ou payant) — ${swpPct(real.length, vTot)} des visites`, real.length, vTot ? Math.max(2, Math.round((real.length / vTot) * 100)) : 0)
         + FunnelBar(`💳 Payants — ${swpPct(payants.length, real.length)} des clients`, payants.length, vTot ? Math.max(2, Math.round((payants.length / vTot) * 100)) : 0)
         + `</div>`;
-
-      const cActive = proNonRevoked.length + trialsActifs.length;
-      const clients = `<div class="kpi-grid">`
-        + KpiTile('Clients réels SWP', real.length, `${cActive} non révoqués · ${revokedReal.length} révoqués · ${nbTest} test/démo exclus`)
-        + KpiTile('Trial', trialsActifs.length, 'en période d’essai')
-        + KpiTile('Pro (payant)', payants.length, `${proNonRevoked.length} clé(s) pro non-révoquée(s) · ${payants.length} active(s) constatée(s)`
-            + (resilies.length > 0 ? ` · ${resilies.length} résiliation(s) programmée(s)` : ''))
-        + KpiTile('Revoked', revokedReal.length, 'annulés / expirés')
-        + `</div>`;
-
-      const usage = `<div class="kpi-grid">`
-        + KpiTile('Transcriptions ce mois', u.transcriptions || 0, `limites : ${limTrial.transcriptions} (trial) / ${limPro.transcriptions} (pro) par client`)
-        + KpiTile('Traductions ce mois', u.translations || 0, `limites : ${limTrial.translations} (trial) / ${limPro.translations} (pro) par client`)
+      const usage = `<div class="kpi-grid" style="margin-top:14px">`
+        + KpiTile('Transcriptions ce mois', u.transcriptions || 0, `limites : ${limTrial.transcriptions} (essai) / ${limPro.transcriptions} (pro) par client`)
+        + KpiTile('Traductions ce mois', u.translations || 0, `limites : ${limTrial.translations} (essai) / ${limPro.translations} (pro) par client`)
         + KpiTile('Visites site', vTot, `+${visits.today || 0} aujourd’hui`)
+        + KpiTile('📉 Départs cumulés', swpPct(revokedReal.length, real.length), `${revokedReal.length} partis / ${real.length} clients depuis le début`)
         + `</div>`;
 
-      const rows = swpList.length ? swpList.map(cu => {
-        const h = cu._h;
-        const cls = h.rank <= 1 ? 'row-risk' : h.cls === 'test' ? 'row-test' : h.cls === 'rev' ? 'row-rev' : '';
-        const um = cu.usageMonth || {}, ut = cu.usageTotal || {};
-        // `data-label` = le libellé de colonne, requis par la bascule en cartes sous 620px
-        // (cf. `.swp-table td::before`). Sur PC il est simplement ignoré.
-        return `<tr class="${cls}">`
-          + `<td data-label="Santé"><span class="health h-${h.cls}"><span class="hdot"></span>${safeText(h.label)}</span></td>`
+      const anciens = swpList.filter(c => c.revoked || swpIsTest(c.email));
+      const rows = anciens.map(cu => {
+        const ut = cu.usageTotal || {};
+        return `<tr class="${swpIsTest(cu.email) ? 'row-test' : 'row-rev'}">`
           + `<td data-label="Email">${safeText(cu.email)}</td>`
-          + `<td data-label="Statut">${swpPlanBadge(cu)}</td>`
-          + `<td data-label="Créé le">${swpFmtDate(cu.created)}</td>`
-          + `<td data-label="Expire le">${swpFmtDate(cu.expiresAt)}</td>`
-          + `<td data-label="Dernière activité" title="${safeText(cu.lastUsed || '')}">${swpFmtRelative(cu.lastUsed)}</td>`
-          + `<td data-label="Usage ${safeText(data.month || '')}" class="mono">${um.transcriptions || 0}t / ${um.translations || 0}tr</td>`
-          + `<td data-label="Usage total" class="mono muted">${ut.transcriptions || 0}t / ${ut.translations || 0}tr</td>`
+          + `<td data-label="Statut">${swpIsTest(cu.email) ? '<span class="badge">Test</span>' : swpPlanBadge(cu)}</td>`
+          + `<td data-label="Arrivé le">${swpFmtDate(cu.created)}</td>`
+          + `<td data-label="Parti le">${swpFmtDate(cu.endsAt || cu.expiresAt)}</td>`
+          + `<td data-label="Usage total" class="mono muted">${ut.transcriptions || 0} transcr. / ${ut.translations || 0} trad.</td>`
           + `</tr>`;
-      }).join('') : '';
-      const table = swpList.length
-        ? `<div class="table-wrap"><table class="data-table swp-table"><thead><tr><th>Santé</th><th>Email</th><th>Statut</th><th>Créé le</th><th>Expire le</th><th>Dernière activité</th><th>Usage ${safeText(data.month || '')}</th><th>Usage total</th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : `<div class="empty">Aucun client pour le moment.</div>`;
+      }).join('');
+      const tableAnciens = anciens.length
+        ? `<div class="table-wrap"><table class="data-table swp-table"><thead><tr><th>Email</th><th>Statut</th><th>Arrivé le</th><th>Parti le</th><th>Usage total</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : `<div class="empty">Aucun ancien client.</div>`;
 
       const when = new Date(data.generatedAt || Date.now()).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       return RoleBanner(getApp('swp'))
+        + `<section class="section"><div class="section-head"><h2>L’essentiel</h2></div>${top}</section>`
         + (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
-        + `<section class="section"><div class="section-head"><h2>💶 Revenu &amp; abonnements</h2></div>${money}</section>`
-        + `<section class="section"><div class="section-head"><h2>Funnel</h2><a href="#acq">Acquisition →</a></div>${funnel}</section>`
-        + `<section class="section"><div class="section-head"><h2>Clients</h2></div>${clients}</section>`
-        + `<section class="section"><div class="section-head"><h2>Usage ${safeText(data.month || '')}</h2></div>${usage}</section>`
-        + `<section class="section"><div class="section-head"><h2>Détail clients · triés par risque</h2></div>${table}</section>`
+        + `<section class="section"><div class="section-head"><h2>Clients en cours · ${enCours.length}</h2></div>${listeEnCours}</section>`
+        + `<section class="section">${Panel('swp-acq', '📈 Visites, conversion & usage du mois', funnel + usage, false)}</section>`
+        + `<section class="section">${Panel('swp-anciens', `🗂 Anciens clients & comptes de test · ${anciens.length}`, tableAnciens, false)}</section>`
         + `<div class="acq-when">Dernière mise à jour : ${safeText(when)}</div>`;
     }
 
