@@ -618,7 +618,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.42.2-dkpc-essai';
+    const VERSION = 'v2.43.0-essentiel-sv-dkpc';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -635,7 +635,7 @@
         tokenKey: 'monitoring_swp_token', gateway: 'https://api-gateway-pro.quang101182.workers.dev', endpoints: { overview: '/admin/swp/overview' }, subtitle: 'Abonnements, santé client et revenus.', sections: [] },
       { key: 'sv', name: 'StoryVoice', icon: '◌', family: 'products', color: PRODUCT_COLORS.sv, auth: 'token',
         role: 'repos', roleLabel: 'Pas encore promu',
-        roleNote: 'Produit <b>récent, mis en place mais jamais promu</b> — aucune pub, aucun marketing à ce stade : c’est <b>délibéré</b>, la mise en place d’abord, le reste au rythme choisi. <b>« 0 € de revenu » et « 0 clic sortant » sont donc attendus</b> : on ne mesure pas l’échec d’un lancement qui n’a pas eu lieu.',
+        roleNote: 'Aucune pub ni marketing à ce stade, <b>c’est délibéré</b> : « 0 € » et « 0 clic sortant » sont attendus.',
         tokenKey: 'monitoring_storyvoice_token', gateway: 'https://api-gateway-pro.quang101182.workers.dev', endpoints: { overview: '/admin/sv/overview' }, subtitle: 'Crédits, conversion et revenus.', sections: [] },
       // DictoKey PC — passerelle SÉPARÉE de celle de l'Android (décision D3) : un bug de licence
       // PC ne doit pas pouvoir casser une dictée Android. D'où une entrée et un token distincts.
@@ -2072,11 +2072,14 @@
     // l'Android) mais ne rapporte plus rien. Les confondre, c'est reproduire le
     // MRR surestimé de SubWhisper Pro — 27 € affichés contre 9 € réels.
 
-    // 11,99 € TTC affichés. Ce n'est PAS ce qu'on encaisse : le merchant of record (Polar depuis le 20/08/2026, LemonSqueezy avant) est
-    // Merchant of Record, la TVA (2,00 €) et sa commission (~1,06 €) sortent du
-    // prix. On montre donc les deux, sinon la marge se raisonne sur un chiffre faux.
-    const DKPC_PRICE_TTC = 11.99;
-    const DKPC_NET_EUR = 8.89;
+    // v2.43.0 — MESURÉ le 04/10/2026 sur une session du vrai checkout Polar (adresse FR) :
+    // amount 999 · tax_amount 167 · net_amount 832 · total 999. Polar applique la TVA INCLUSE
+    // (tax_behavior null = défaut de l'organisation) : le client paie 9,99 € TTC, PAS 11,99 €.
+    // L'ancien 11,99 € venait de LemonSqueezy (prix hors taxe, D1-bis du 18/08), fermé le 20/08.
+    // Net : 8,32 € HT − frais Polar ESTIMÉS (offre Starter 5 % + 0,50 $, +1,5 % carte non-US ;
+    // l'offre réelle n'est pas lisible avec le jeton en lecture seule) ≈ 7,24 €.
+    const DKPC_PRICE_TTC = 9.99;
+    const DKPC_NET_EUR = 7.24;
 
     function dkpcSante(l) {
       if (l.payant) return { cls: 'ok', label: 'Payant', rank: 3 };
@@ -2106,89 +2109,74 @@
         const qui = sursis.slice(0, 3).map(l => l.email).join(', ') + (sursis.length > 3 ? ' …' : '');
         alertHtml = Alert('critique', `${sursis.length} accès ouvert(s) sans paiement`,
           `annulation en cours ou paiement en échec — l'accès tourne à nos frais : ${qui}`);
-      } else if (payants.length > 0) {
-        alertHtml = Alert('ok', 'Aucun accès à découvert', `les ${payants.length} abonnement(s) actif(s) sont bien payés.`);
       }
 
-      const mrrBrut = (payants.length * DKPC_PRICE_TTC).toFixed(2);
-      const mrrNet = (payants.length * DKPC_NET_EUR).toFixed(2);
-      const money = `<div class="kpi-grid">`
-        + KpiTile('💶 MRR encaissé', `${mrrNet} €`, `${payants.length} × ${DKPC_NET_EUR}€ nets — après TVA 20% et commission Polar`)
-        + KpiTile('🏷 MRR affiché', `${mrrBrut} €`, `${payants.length} × ${DKPC_PRICE_TTC}€ TTC — ce que le client paie, pas ce qu'on touche`)
-        + KpiTile('💳 Payants', payants.length, `Polar « active » STRICT — ni essai, ni annulé, ni offert`)
-        + KpiTile('🎁 Essais en cours', essais.length, 'essai 7 jours, carte demandée par Polar — ne rapporte encore rien')
-        + `</div>`;
-
-      const parc = `<div class="kpi-grid">`
-        + KpiTile('Licences totales', liste.length, `${termines.length} terminée(s) · ${offerts.length} offerte(s) (admin)`)
-        + KpiTile('Accès actifs', liste.filter(l => l.actif).length, 'toutes raisons confondues')
-        + KpiTile('À surveiller', sursis.length, 'accès ouvert mais plus payé')
-        + KpiTile('Appareils liés', liste.reduce((n, l) => n + (l.appareils || 0), 0), 'plafond : 20 par licence')
-        + `</div>`;
-
-      const rows = liste.map(l => {
-        const h = l._h;
-        const cls = h.rank <= 1 ? 'row-risk' : h.cls === 'test' ? 'row-test' : h.cls === 'rev' ? 'row-rev' : '';
-        return `<tr class="${cls}">`
-          + `<td data-label="Santé"><span class="health h-${h.cls}"><span class="hdot"></span>${safeText(h.label)}</span></td>`
-          + `<td data-label="Email">${safeText(l.email || '—')}</td>`
-          + `<td data-label="Clé" class="mono muted">${safeText(l.cle || '')}</td>`
-          + `<td data-label="Statut">${safeText(l.lsStatus || '—')}</td>`
-          + `<td data-label="Motif">${safeText(l.raison || '—')}</td>`
-          + `<td data-label="Créé le">${swpFmtDate(l.creeLe)}</td>`
-          + `<td data-label="Échéance">${swpFmtDate(l.jusquA)}</td>`
-          + `<td data-label="Appareils" class="mono">${safeText(l.appareils || 0)}</td>`
-          + `</tr>`;
-      }).join('');
-      const table = liste.length
-        ? `<div class="table-wrap"><table class="data-table swp-table"><thead><tr><th>Santé</th><th>Email</th><th>Clé</th><th>Statut</th><th>Motif</th><th>Créé le</th><th>Échéance</th><th>Appareils</th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : `<div class="empty">Aucune licence pour le moment — le produit n'a pas encore été vendu.</div>`;
-
-      // ── Usage réel (depuis la passerelle v0.4.0) ─────────────────────────
-      // Ces chiffres n'existaient pas avant : la dictée PC passait par la
-      // passerelle Android et rien n'était compté ici. C'est pourquoi cette
-      // section est apparue APRÈS le tableau des licences, et pas avant.
+      // v2.43.0 — refonte « l'essentiel d'abord » (même principe que SubWhisper Pro v2.42.0).
+      const mrrTtc = (payants.length * DKPC_PRICE_TTC).toFixed(2).replace('.', ',');
+      const mrrNet = (payants.length * DKPC_NET_EUR).toFixed(2).replace('.', ',');
       const u = payload && payload.usage;
+      const tot = (u && u.total) || null, cout = (u && u.cout) || {}, jours = (u && u.jours) || 30;
+      const top = `<div class="kpi-grid">`
+        + KpiTile('💶 Revenu mensuel', `${mrrTtc} €`, payants.length ? `${payants.length} × ${String(DKPC_PRICE_TTC).replace('.', ',')} € TTC · ≈ ${mrrNet} € nets` : 'aucun abonné payant pour le moment')
+        + KpiTile('💳 Payants', payants.length, sursis.length ? `+ ${sursis.length} accès ouvert(s) sans paiement` : 'abonnement Polar actif')
+        + KpiTile('🎁 Essais en cours', essais.length, essais.length ? '7 jours, carte demandée' : 'aucun essai en cours')
+        + KpiTile('👥 Utilisateurs actifs', tot ? (tot.appareilsUniques || 0) : '—', tot ? `${(tot.appels || 0).toLocaleString('fr-FR')} dictées sur ${jours} jours` : 'usage indisponible')
+        + `</div>`;
+
+      function lic(l) {
+        if (l.payant) return { badge: 'pro', label: 'Payant', color: 'var(--good)', ech: 'renouvelle le' };
+        if (l.actif && l.raison === 'essai') return { badge: 'trial', label: 'Essai', color: 'rgba(245,181,46,.55)', ech: 'fin d’essai' };
+        if (l.actif && l.tier === 'pro') return { badge: 'orphan', label: 'Offert', color: 'var(--ink-faint)', ech: 'échéance' };
+        return { badge: 'cancel', label: 'Sans paiement', color: 'var(--warn)', ech: 'accès jusqu’au' };
+      }
+      const enCours = liste.filter(l => l.actif).map(l => Object.assign(l, { _s: lic(l) }));
+      const ordreL = { cancel: 0, pro: 1, trial: 2, orphan: 3 };
+      enCours.sort((x, y) => ordreL[x._s.badge] - ordreL[y._s.badge]);
+      const listeEnCours = enCours.length
+        ? `<div class="cl-list">` + enCours.map(l => `<article class="cl-row" style="--cl-color:${l._s.color}">`
+            + `<div class="cl-who">${safeText(l.email || '—')}<small>licence du ${swpShortDate(l.creeLe)}</small></div>`
+            + `<span class="badge ${l._s.badge}">${safeText(l._s.label)}</span>`
+            + `<div class="cl-cell">${safeText(l._s.ech)}<strong>${l._s.badge === 'orphan' && !l.jusquA ? 'sans échéance' : swpShortDate(l.jusquA)}</strong></div>`
+            + `<div class="cl-cell">appareils liés<strong>${safeText(l.appareils || 0)} / 20</strong></div>`
+            + `</article>`).join('') + `</div>`
+        : `<div class="empty">Aucune licence active.</div>`;
+
+      // ── Détails repliés ──
       let usageHtml = `<div class="empty">Usage indisponible — la passerelle ne répond pas sur /admin/usage.</div>`;
-      let serieHtml = '';
-      if (u && u.total) {
-        const tot = u.total, cout = u.cout || {};
-        const jours = u.jours || 30;
-        const motsParJour = Math.round((tot.mots || 0) / jours);
+      if (tot) {
         const minutes = Math.round((tot.audioSec || 0) / 60);
         usageHtml = `<div class="kpi-grid">`
-          + KpiTile('👥 Utilisateurs actifs', tot.appareilsUniques || 0, `appareils ayant dicté sur ${jours} jours`)
-          + KpiTile('🎙 Dictées', (tot.appels || 0).toLocaleString('fr-FR'), `${motsParJour.toLocaleString('fr-FR')} mots/jour en moyenne`)
-          + KpiTile('📝 Mots transcrits', (tot.mots || 0).toLocaleString('fr-FR'), `l'unité du quota : 2 000/semaine en gratuit`)
-          + KpiTile('⏱ Audio traité', `${minutes} min`, `${(tot.audioSec || 0).toLocaleString('fr-FR')} s — l'unité que Groq facture`)
-          + `</div>`
-          + `<div class="kpi-grid">`
-          + KpiTile('💸 Coût estimé', `${(cout.total || 0).toFixed(3)} $`, `STT ${(cout.stt || 0).toFixed(3)} $ · LLM ${(cout.llm || 0).toFixed(3)} $ — estimation, la facture reste la vérité`)
+          + KpiTile('📝 Mots transcrits', (tot.mots || 0).toLocaleString('fr-FR'), `${Math.round((tot.mots || 0) / jours).toLocaleString('fr-FR')} mots/jour · quota gratuit 2 000/semaine`)
+          + KpiTile('⏱ Audio traité', `${minutes} min`, 'l’unité facturée par le moteur de transcription')
+          + KpiTile('💸 Coût estimé', `${(cout.total || 0).toFixed(2).replace('.', ',')} $`, `transcription ${(cout.stt || 0).toFixed(2).replace('.', ',')} $ · réécriture ${(cout.llm || 0).toFixed(2).replace('.', ',')} $`)
           + KpiTile('📊 Marge', payants.length ? `${Math.round((1 - (cout.total || 0) / 1.1 / (payants.length * DKPC_NET_EUR)) * 100)} %` : '—',
-                    payants.length ? `sur ${mrrNet} € encaissés` : 'aucun abonné payant pour le moment')
+                    payants.length ? `sur ${mrrNet} € nets` : 'aucun abonné payant')
           + `</div>`;
-
-        // Une série à zéro partout ne mérite pas un graphique : elle mérite une phrase.
         const actifs = (u.serie || []).filter(j => j.appels > 0);
         if (actifs.length) {
           const max = Math.max(...actifs.map(j => j.appels));
-          serieHtml = `<div class="funnel">` + actifs.slice(-14).map(j =>
-            FunnelBar(j.jour, `${j.appels} dictées · ${j.mots} mots`, Math.max(3, Math.round((j.appels / max) * 100)))
+          usageHtml += `<div class="funnel" style="margin-top:14px">` + actifs.slice(-14).map(j =>
+            FunnelBar(swpShortDate(j.jour), `${j.appels} dictées`, Math.max(3, Math.round((j.appels / max) * 100)))
           ).join('') + `</div>`;
-        } else {
-          serieHtml = `<div class="empty">Aucune dictée enregistrée sur la période.</div>`;
         }
       }
+      const rows = termines.map(l => `<tr class="row-rev">`
+        + `<td data-label="Email">${safeText(l.email || '—')}</td>`
+        + `<td data-label="Motif">${safeText(l.raison || '—')}</td>`
+        + `<td data-label="Créée le">${swpFmtDate(l.creeLe)}</td>`
+        + `<td data-label="Terminée le">${swpFmtDate(l.jusquA)}</td>`
+        + `</tr>`).join('');
+      const tableTermines = termines.length
+        ? `<div class="table-wrap"><table class="data-table swp-table"><thead><tr><th>Email</th><th>Motif</th><th>Créée le</th><th>Terminée le</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : `<div class="empty">Aucune licence terminée.</div>`;
 
-      const note = `<div class="acq-when">Passerelle ${safeText(data.version || '?')} · usage compté côté serveur depuis la v0.4.0 (avant, la dictée PC passait par la passerelle Android et n'était comptée nulle part).</div>`;
-
-      return sttLien() + (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
-        + `<section class="section"><div class="section-head"><h2>💶 Revenu &amp; abonnements</h2></div>${money}</section>`
-        + `<section class="section"><div class="section-head"><h2>Usage réel · 30 jours</h2></div>${usageHtml}</section>`
-        + `<section class="section"><div class="section-head"><h2>Activité par jour</h2></div>${serieHtml}</section>`
-        + `<section class="section"><div class="section-head"><h2>Parc de licences</h2></div>${parc}</section>`
-        + `<section class="section"><div class="section-head"><h2>Détail des licences · triées par risque</h2></div>${table}</section>`
-        + note;
+      return sttLien()
+        + `<section class="section"><div class="section-head"><h2>L’essentiel</h2></div>${top}</section>`
+        + (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
+        + `<section class="section"><div class="section-head"><h2>Licences en cours · ${enCours.length}</h2></div>${listeEnCours}</section>`
+        + `<section class="section">${Panel('dkpc-usage', `📈 Usage & coûts · ${jours} jours`, usageHtml, false)}</section>`
+        + `<section class="section">${Panel('dkpc-termines', `🗂 Licences terminées · ${termines.length}`, tableTermines, false)}</section>`
+        + `<div class="acq-when">Passerelle ${safeText(data.version || '?')} · prix mesuré sur le checkout Polar (TVA incluse).</div>`;
     }
 
     // === P3 — Vue StoryVoice (parité stricte avec renderSv, index.html l.2506-2552) ===
@@ -2211,10 +2199,10 @@
       const convPct = visits > 0 ? Math.round((real.length / visits) * 1000) / 10 : null;
 
       const money = `<div class="kpi-grid">`
-        + KpiTile('📈 Conversion démo→achat', convPct === null ? '—' : `${convPct}%`, `${real.length} achat(s) / ${svFmt(visits)} visite(s) · seuil GO 3%`)
-        + KpiTile('💶 Revenu estimé', `${svFmt(Math.round(revenue * 100) / 100)} €`, 'dérivé des crédits vendus (packs Polar)')
-        + KpiTile('👤 Clients payants', real.length, internal > 0 ? `${internal} interne(s)/test exclus` : 'aucune clé interne')
-        + KpiTile('👁 Visites démo', svFmt(visits), visToday > 0 ? `+${visToday} auj.` : 'storiesvoice.org')
+        + KpiTile('💶 Revenu', `${svFmt(Math.round(revenue * 100) / 100)} €`, 'packs de crédits vendus, TTC')
+        + KpiTile('👤 Clients payants', real.length, internal > 0 ? `${internal} clé(s) interne(s) exclue(s)` : 'achats Polar')
+        + KpiTile('👁 Visites démo', svFmt(visits), visToday > 0 ? `+${visToday} aujourd’hui` : 'storiesvoice.org')
+        + KpiTile('📈 Conversion', convPct === null ? '—' : `${convPct} %`, 'visite → achat · objectif 3 %')
         + `</div>`;
       const credits = `<div class="kpi-grid">`
         + KpiTile('💳 Crédits vendus', svFmt(grantedReal), `≈ ${svHours(grantedReal)} h de voix`)
@@ -2231,10 +2219,20 @@
           + `<div class="sv-row-meta">🔋 ${svFmt(c.creditsRemaining)} restants · 🎧 ${svHours(c.creditsUsed)} h écoutées · 💳 ${svFmt(c.creditsGranted)} vendus · créé ${swpFmtDate(c.created)} · vu ${swpFmtRelative(c.lastUsed)}</div></div>`;
       }).join('') : '<div class="empty">Aucune clé StoryVoice pour le moment.</div>';
 
+      // v2.43.0 — l'essentiel d'abord : 4 tuiles, puis les clients PAYANTS ; crédits et clés internes repliés.
+      const clientsReels = real.length ? sorted.filter(c => !svIsInternal(c.email)).map(c => {
+        const badge = c.revoked ? '<span class="badge rev">Révoqué</span>' : '<span class="badge pro">Client</span>';
+        return `<div class="sv-row"><div class="sv-row-main"><span class="sv-email">${safeText(c.email || '—')}</span> ${badge}</div>`
+          + `<div class="sv-row-meta">🔋 ${svFmt(c.creditsRemaining)} restants · 🎧 ${svHours(c.creditsUsed)} h écoutées · acheté le ${swpFmtDate(c.created)} · vu ${swpFmtRelative(c.lastUsed)}</div></div>`;
+      }).join('') : '<div class="empty">Aucun client payant pour le moment.</div>';
+      const internes = sorted.filter(c => svIsInternal(c.email)).map(c =>
+        `<div class="sv-row"><div class="sv-row-main"><span class="sv-email">${safeText(c.email || '—')}</span> <span class="badge">interne/test</span></div>`
+        + `<div class="sv-row-meta">🔋 ${svFmt(c.creditsRemaining)} restants · 🎧 ${svHours(c.creditsUsed)} h écoutées · vu ${swpFmtRelative(c.lastUsed)}</div></div>`).join('');
       return RoleBanner(getApp('sv'))
-        + `<section class="section"><div class="section-head"><h2>🎭 Conversion &amp; revenu</h2></div>${money}</section>`
-        + `<section class="section"><div class="section-head"><h2>Crédits de voix &amp; écoute</h2></div>${credits}</section>`
-        + `<section class="section"><div class="section-head"><h2>Détail clients · clés internes/test exclues du revenu</h2></div>${rows}</section>`
+        + `<section class="section"><div class="section-head"><h2>L’essentiel</h2></div>${money}</section>`
+        + `<section class="section"><div class="section-head"><h2>Clients payants · ${real.length}</h2></div>${clientsReels}</section>`
+        + `<section class="section">${Panel('sv-credits', '🔋 Crédits de voix & écoute', credits, false)}</section>`
+        + (internes ? `<section class="section">${Panel('sv-internes', `🗂 Clés internes & test · ${internal}`, internes, false)}</section>` : '')
         + `<div class="acq-when">Source : /admin/sv/overview · généré ${data.generatedAt ? swpFmtRelative(data.generatedAt) : ''}</div>`;
     }
 

@@ -83,7 +83,7 @@ def shot(nom, largeur):
     print(f"  (capture) {f}")
 
 print("=== Rendu ===")
-t("version v2.42.x chargee", str(ev("VERSION")).startswith("v2.42"), ev("VERSION"))
+t("version v2.42.x chargee", str(ev("VERSION")).startswith(("v2.42", "v2.43")), ev("VERSION"))
 txt = ev("document.querySelector('#view-root')?.textContent || ''")
 t("section « L'essentiel » presente", "L’essentiel" in txt, txt[:150])
 tiles = ev("Object.fromEntries([...document.querySelectorAll('#view-root .kpi-tile')].slice(0,4).map(t=>[t.querySelector('.kpi-label').textContent.trim(), t.querySelector('.kpi-value').textContent.trim()]))")
