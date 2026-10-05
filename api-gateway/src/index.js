@@ -47,7 +47,7 @@ import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMote
   from './stt_moteur.js';   // v1.64 : interrupteur de moteur de transcription par app + relais MAI
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.70';   // 1.70 (05/10) : /config rapide (lectures KV en parallele, test YouTube borne a 1,5 s, t_ms dans la reponse) -- 5,1 s depuis le reseau mobile faisait passer la LED GWY de SubWhisper au rouge. 1.69 (05/10) : alerte panne MAI seulement a la 2e panne en < 10 min (un 520 isole rattrape par le reessai alertait pour rien). 1.68 (03/10) : app `jarvis` (menu restreint MAI / Groq, defaut Groq) dans l'interrupteur du dashboard ; X-Stt-App: jarvis impute ses pannes et ses secondes a part. 1.67 (03/10) : secondes MAI facturees comptees par app (jour + mois), lues au dashboard. 1.66 (03/10) : seuls 5xx/401/403/429/reseau comptent comme panne MAI (un 400 = la requete, pas MAI). 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
+const VERSION = '1.73';   // 1.73 (05/10) : /config liste les NOMS de cles (1 list au lieu de 17 lectures) -- key:GROQ_KEY se lisait en 5,08 s au datacenter CDG ; journal de mesure 1.71-1.72 retire. 1.72 (05/10) : [config-timing] detaille chaque lecture lente et chaque test YouTube. 1.71 (05/10) : journal [config-timing] (auth / config / colo) pour la lenteur mobile. 1.70 (05/10) : /config rapide (lectures KV en parallele, test YouTube borne a 1,5 s, t_ms dans la reponse) -- 5,1 s depuis le reseau mobile faisait passer la LED GWY de SubWhisper au rouge. 1.69 (05/10) : alerte panne MAI seulement a la 2e panne en < 10 min (un 520 isole rattrape par le reessai alertait pour rien). 1.68 (03/10) : app `jarvis` (menu restreint MAI / Groq, defaut Groq) dans l'interrupteur du dashboard ; X-Stt-App: jarvis impute ses pannes et ses secondes a part. 1.67 (03/10) : secondes MAI facturees comptees par app (jour + mois), lues au dashboard. 1.66 (03/10) : seuls 5xx/401/403/429/reseau comptent comme panne MAI (un 400 = la requete, pas MAI). 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
 //    // 1.63 (27/09) : retrait de la route DELETE ElevenLabs de la 1.62 -- inutile (voix de la bibliotheque utilisables sans ajout)
 // v1.59 (21/09/2026) — runSoldeWatch : sondes de SOLDE pour deepseek, moonshot-kimi, runpod, piapi
 // (les 4 fournisseurs rechargeables, jusque-la angles morts du cost watch). Voir la fonction.
@@ -415,22 +415,23 @@ function handleHealth() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function handleConfig(env) {
-  // v1.70 (05/10) : /config prenait 5,1 s a CHAQUE appel depuis le reseau mobile de Quang (0,15 s depuis le PC) :
-  // ~20 lectures KV en serie + un test YouTube chez Google SANS delai max. SubWhisper abandonne a 8 s et sa 2e
-  // verification au demarrage passait la LED GWY au rouge. Lectures en parallele, test YouTube borne a 1,5 s,
-  // et `t_ms` dans la reponse pour voir ou part le temps.
+  // v1.73 (05/10) : /config prenait 5,1 s a CHAQUE appel depuis le reseau mobile de Quang. Mesure (wrangler tail,
+  // v1.71-1.72) : datacenter CDG, UNE seule lecture lente -- `key:GROQ_KEY`, 5,08 s pile, les 16 autres en
+  // quelques ms ; MRS (PC) : tout en < 20 ms. La cle n'a rien de particulier (56 o, ni metadonnee ni expiration) :
+  // c'est le cache KV de CDG. Or /config ne veut savoir QUE quelles cles existent : un seul list() des NOMS
+  // suffit, plus rapide et sans lire aucun secret. SubWhisper abandonne a 8 s et passait la LED GWY au rouge.
   const t0 = Date.now();
   const apiKeys = KNOWN_KEYS.filter(k => k.endsWith('_KEY'));
-  const [workerUrl, vals, diagFolder, mcpDriveUrl, ytKeysRaw, ytUsedRaw] = await Promise.all([
+  const [noms, workerUrl, diagFolder, mcpDriveUrl, ytKeysRaw, ytUsedRaw] = await Promise.all([
+    env.GATEWAY_KV.list({ prefix: 'key:' }).then(l => new Set(l.keys.map(k => k.name))),
     resolveKey(env, 'WORKER_URL'),
-    Promise.all(apiKeys.map(k => kvGetKey(env, k))),
     kvGetKey(env, 'DIAG_FOLDER_ID'),
     kvGetKey(env, 'MCP_DRIVE_URL'),
     kvGetKey(env, 'YOUTUBE_KEYS'),
     env.GATEWAY_KV.get(`ytusage:${new Date().toISOString().slice(0, 10)}`),
   ]);
   // List which API keys are configured (name only, no values)
-  const apis = apiKeys.filter((k, i) => vals[i]).map(k => k.replace('_KEY', ''));
+  const apis = apiKeys.filter(k => noms.has(`key:${k}`)).map(k => k.replace('_KEY', ''));
   const tKv = Date.now() - t0;
 
   // YouTube server keys count (for client display) + daily usage counter
@@ -438,7 +439,7 @@ async function handleConfig(env) {
   const ytUsed = parseInt(ytUsedRaw || '0', 10);
 
   // YouTube quota health check — videos.list costs 1 unit (vs 100 for search.list).
-  // null = pas de reponse dans le delai (inconnu), jamais un faux « quota epuise ».
+  // Borne a 1,5 s par cle (v1.70) ; null = pas de reponse dans le delai, jamais un faux « quota epuise ».
   let ytQuotaOk = null;
   if (ytKeysRaw) {
     const testKeys = ytKeysRaw.split(',').map(k => k.trim()).filter(Boolean);
