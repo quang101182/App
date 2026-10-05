@@ -124,15 +124,22 @@ async function batterie(worker) {
   scenario.azure = 503;
   r = await appel('POST', '/api/mai', { body: corps() });
   ok('panne 503 : relayee, pas de transcription comptee', r.status === 503 && tx() === 1);
-  ok('panne : compteur + 1 alerte Telegram avec le lien du dashboard',
-     env.PRO_KV.store.get(`stt:err:swp:${jour()}`) === '1' && journal.tg.length === 1 && journal.tg[0].includes('dash.se7enai.com'));
+  ok('panne isolee : compteur 1, AUCUNE alerte (l app reessaie)',
+     env.PRO_KV.store.get(`stt:err:swp:${jour()}`) === '1' && journal.tg.length === 0);
   r = await appel('POST', '/api/mai', { body: corps() });
-  ok('2e panne la meme heure : PAS de 2e alerte', env.PRO_KV.store.get(`stt:err:swp:${jour()}`) === '2' && journal.tg.length === 1);
+  ok('2e panne en < 10 min : 1 alerte Telegram avec le lien du dashboard',
+     env.PRO_KV.store.get(`stt:err:swp:${jour()}`) === '2' && journal.tg.length === 1 && journal.tg[0].includes('dash.se7enai.com'));
+  r = await appel('POST', '/api/mai', { body: corps() });
+  ok('3e panne la meme heure : PAS de 2e alerte', env.PRO_KV.store.get(`stt:err:swp:${jour()}`) === '3' && journal.tg.length === 1);
+  for (const k of [...env.PRO_KV.store.keys()]) if (k.startsWith('alert:stt_panne:')) env.PRO_KV.store.delete(k);
+  env.PRO_KV.store.set('stt:last_error:swp', JSON.stringify({ ts: new Date(Date.now() - 11 * 60000).toISOString(), status: 503, message: '' }));
+  r = await appel('POST', '/api/mai', { body: corps() });
+  ok('panne precedente > 10 min : PAS d alerte', journal.tg.length === 1);
   scenario.azure = 'throw';
   r = await appel('POST', '/api/mai', { body: corps() });
   ok('reseau coupe -> 502, rien compte', r.status === 502 && tx() === 1);
   r = await appel('GET', '/admin/stt-engine?app=swp', { pro: false, auth: ADM });
-  ok('admin voit pannes + secondes du mois', r.json.errors_today === 3 && r.json.mai_secondes_mois === 360);
+  ok('admin voit pannes + secondes du mois', r.json.errors_today === 5 && r.json.mai_secondes_mois === 360);
 
   // ── quota : un client au plafond de TRANSCRIPTIONS est refuse AVANT Azure
   scenario.azure = 200;
@@ -181,6 +188,11 @@ await mutation('/api/mai soumis au quota des TRADUCTIONS', 'index.js',
 await mutation('/api/mai sans decompte sur succes', 'index.js',
   "return relayerEtCompter(proxyMai(request, env, ctx), proKey, 'transcription', env, ctx);", 'return proxyMai(request, env, ctx);',
   'succes = 1 transcription comptee (comme Groq)');
+await mutation('alerte des la 1re panne (sans recidive)', 'index.js',
+  'if (!(await noterPanne(env.PRO_KV, app, status, message))) return;', 'await noterPanne(env.PRO_KV, app, status, message);',
+  'panne isolee : compteur 1, AUCUNE alerte (l app reessaie)');
+await mutation('fenetre de recidive ignoree', 'stt_moteur.js',
+  'recidive = age >= 0 && age < FENETRE_RECIDIVE_MS;', 'recidive = true;', 'panne precedente > 10 min : PAS d alerte');
 await mutation('un 400 compte comme panne', 'stt_moteur.js',
   'return status >= 500 ||', 'return status >= 400 ||', '400 : relaye, rien compte, ni panne ni alerte');
 await mutation('lecture du moteur soumise au quota (placee apres le rate limit)', 'index.js',

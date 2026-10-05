@@ -39,7 +39,7 @@
 import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMoteur, etatMoteur, basculer, noterPanne, alerterPanne, cibleMai }
   from './stt_moteur.js';
 
-const VERSION = '1.26.0';   // 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
+const VERSION = '1.27.0';   // 1.27.0 (05/10/2026) : alerte panne MAI seulement a la 2e panne en < 10 min (l'app reessaie 3 fois depuis v1.4.1 ; un 520 isole alertait pour rien). 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
 // v1.25.3 (2026-10-01) - API Polar : version EPINGLEE (en-tete Polar-Version).
 //   Polar versionne son API par trimestre depuis le 01/10/2026 ; sans en-tete, un appel suit la
 //   version courante et son contrat change sous nos pieds a chaque release. 2026-10 verifiee le
@@ -368,7 +368,8 @@ async function proxyMai(request, env, ctx) {
   if (!cle) return err('AZURE_SPEECH_KEY not configured', 503);
   const app = 'swp';
   const panne = async (status, message) => {
-    await noterPanne(env.PRO_KV, app, status, message);
+    // v1.27.0 : une panne isolee (l'app reessaie depuis v1.4.1) n'alerte plus, la 2e en < 10 min oui
+    if (!(await noterPanne(env.PRO_KV, app, status, message))) return;
     await alerterPanne(env.PRO_KV, app, `HTTP ${status} ${message}`, (t) => telegramPanne(env, t));
   };
   let resp;

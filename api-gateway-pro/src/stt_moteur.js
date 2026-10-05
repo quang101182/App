@@ -116,9 +116,19 @@ export function estPanneMai(status) {
   return status >= 500 || status === 401 || status === 403 || status === 429;
 }
 
-/** Échec MAI : compteur du jour + dernière erreur lisible (best-effort, ne jette jamais). */
+/** v1.27.0 (copie de la gateway principale v1.69) : une panne n'alerte que si une autre l'a précédée de moins de 10 min. Un 520 isolé d'Azure,
+ *  rattrapé par le 2e essai de l'app 10 s plus tard, alertait pour rien (05/10). Une vraie panne, elle,
+ *  se répète (Télégramme Vidéo fait 3 essais) : l'alerte part au 2e échec. */
+export const FENETRE_RECIDIVE_MS = 10 * 60 * 1000;
+
+/** Échec MAI : compteur du jour + dernière erreur lisible (best-effort, ne jette jamais).
+ *  Renvoie true si la panne PRÉCÉDENTE date de moins de FENETRE_RECIDIVE_MS (= il faut alerter). */
 export async function noterPanne(kv, app, status, message) {
+  let recidive = false;
   try {
+    const prec = await kv.get(`stt:last_error:${app}`, 'json');
+    const age = prec && prec.ts ? Date.now() - Date.parse(prec.ts) : Infinity;
+    recidive = age >= 0 && age < FENETRE_RECIDIVE_MS;
     const k = `stt:err:${app}:${jourIso()}`;
     const n = parseInt((await kv.get(k)) || '0', 10) + 1;
     await Promise.all([
@@ -128,6 +138,7 @@ export async function noterPanne(kv, app, status, message) {
       }), { expirationTtl: 30 * 86400 }),
     ]);
   } catch { /* un compteur raté ne doit jamais aggraver une panne */ }
+  return recidive;
 }
 
 /**

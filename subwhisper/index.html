@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.64</title>
+<title>SubWhisper v9.65</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1143,7 +1143,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.64</span>
+    <span class="ver-badge">v9.65</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1488,7 +1488,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.64 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.65 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -2916,6 +2916,27 @@ function _maiSansBoucle(mots) {
   return { mots: out, retires: retires };
 }
 
+// v9.65 : 3 essais sur PANNE MAI (5xx, 429, reseau), attente 5 puis 10 s -- comme Telegramme Video.
+// Un 520 isole d'Azure faisait echouer toute la transcription (05/10). Un 4xx (fichier, langue, cle) n'est
+// pas reessaye : il echouerait pareil. Un FormData se renvoie tel quel (pas un flux).
+async function _fetchMaiReessai(url, opts, chunkNum, totalChunks) {
+  for (var essai = 1; ; essai++) {
+    var resp = null, err = null;
+    try { resp = await fetch(url, opts); } catch (e) { if (e && e.name === 'AbortError') throw e; err = e; }
+    var panne = !!err || resp.status >= 500 || resp.status === 429;
+    if (!panne || essai >= 3) { if (err) throw err; return resp; }
+    appendLog('🔁 MAI ' + chunkNum + '/' + totalChunks + ' : essai ' + essai + '/3 en echec (' +
+      (err ? (err.message || err) : 'HTTP ' + resp.status) + '), nouvel essai dans ' + (5 * essai) + ' s');
+    // L'attente cede tout de suite a une annulation (sinon « Stop » mettait jusqu'a 10 s a agir).
+    await new Promise(function(r) {
+      var sig = opts.signal, t = setTimeout(fin, 5000 * essai);
+      function fin() { clearTimeout(t); if (sig) sig.removeEventListener('abort', fin); r(); }
+      if (sig) sig.addEventListener('abort', fin);
+    });
+    if (opts.signal && opts.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+  }
+}
+
 async function transcribeChunkMai(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec, viaOpenRouter) {
   var f = await _fichierPourMai(file);
   var _gwKey = getGatewayKey();
@@ -2927,10 +2948,10 @@ async function transcribeChunkMai(file, srcLang, key, chunkNum, totalChunks, off
     var fd = new FormData();
     fd.append('audio', f, f.name || 'audio.wav');
     fd.append('definition', JSON.stringify(def));
-    resp = await fetch(GATEWAY_URL + '/api/mai', {
+    resp = await _fetchMaiReessai(GATEWAY_URL + '/api/mai', {
       method: 'POST', headers: { 'Authorization': 'Bearer ' + _gwKey },
       body: fd, signal: _abortCtrl ? _abortCtrl.signal : undefined
-    });
+    }, chunkNum, totalChunks);
     if (!resp.ok) {
       var t = await resp.text().catch(function() { return ''; });
       throw new Error('MAI chunk ' + chunkNum + '/' + totalChunks + ' : HTTP ' + resp.status + ' ' + t.slice(0, 160));
