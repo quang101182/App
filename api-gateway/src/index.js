@@ -47,7 +47,7 @@ import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMote
   from './stt_moteur.js';   // v1.64 : interrupteur de moteur de transcription par app + relais MAI
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.69';   // 1.69 (05/10) : alerte panne MAI seulement a la 2e panne en < 10 min (un 520 isole rattrape par le reessai alertait pour rien). 1.68 (03/10) : app `jarvis` (menu restreint MAI / Groq, defaut Groq) dans l'interrupteur du dashboard ; X-Stt-App: jarvis impute ses pannes et ses secondes a part. 1.67 (03/10) : secondes MAI facturees comptees par app (jour + mois), lues au dashboard. 1.66 (03/10) : seuls 5xx/401/403/429/reseau comptent comme panne MAI (un 400 = la requete, pas MAI). 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
+const VERSION = '1.70';   // 1.70 (05/10) : /config rapide (lectures KV en parallele, test YouTube borne a 1,5 s, t_ms dans la reponse) -- 5,1 s depuis le reseau mobile faisait passer la LED GWY de SubWhisper au rouge. 1.69 (05/10) : alerte panne MAI seulement a la 2e panne en < 10 min (un 520 isole rattrape par le reessai alertait pour rien). 1.68 (03/10) : app `jarvis` (menu restreint MAI / Groq, defaut Groq) dans l'interrupteur du dashboard ; X-Stt-App: jarvis impute ses pannes et ses secondes a part. 1.67 (03/10) : secondes MAI facturees comptees par app (jour + mois), lues au dashboard. 1.66 (03/10) : seuls 5xx/401/403/429/reseau comptent comme panne MAI (un 400 = la requete, pas MAI). 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
 //    // 1.63 (27/09) : retrait de la route DELETE ElevenLabs de la 1.62 -- inutile (voix de la bibliotheque utilisables sans ajout)
 // v1.59 (21/09/2026) — runSoldeWatch : sondes de SOLDE pour deepseek, moonshot-kimi, runpod, piapi
 // (les 4 fournisseurs rechargeables, jusque-la angles morts du cost watch). Voir la fonction.
@@ -415,44 +415,47 @@ function handleHealth() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function handleConfig(env) {
-  const workerUrl = await resolveKey(env, 'WORKER_URL') || '';
-
-  // List which API keys are configured (name only, no values)
+  // v1.70 (05/10) : /config prenait 5,1 s a CHAQUE appel depuis le reseau mobile de Quang (0,15 s depuis le PC) :
+  // ~20 lectures KV en serie + un test YouTube chez Google SANS delai max. SubWhisper abandonne a 8 s et sa 2e
+  // verification au demarrage passait la LED GWY au rouge. Lectures en parallele, test YouTube borne a 1,5 s,
+  // et `t_ms` dans la reponse pour voir ou part le temps.
+  const t0 = Date.now();
   const apiKeys = KNOWN_KEYS.filter(k => k.endsWith('_KEY'));
-  const apis = [];
-  for (const key of apiKeys) {
-    const val = await kvGetKey(env, key);
-    if (val) apis.push(key.replace('_KEY', ''));
-  }
+  const [workerUrl, vals, diagFolder, mcpDriveUrl, ytKeysRaw, ytUsedRaw] = await Promise.all([
+    resolveKey(env, 'WORKER_URL'),
+    Promise.all(apiKeys.map(k => kvGetKey(env, k))),
+    kvGetKey(env, 'DIAG_FOLDER_ID'),
+    kvGetKey(env, 'MCP_DRIVE_URL'),
+    kvGetKey(env, 'YOUTUBE_KEYS'),
+    env.GATEWAY_KV.get(`ytusage:${new Date().toISOString().slice(0, 10)}`),
+  ]);
+  // List which API keys are configured (name only, no values)
+  const apis = apiKeys.filter((k, i) => vals[i]).map(k => k.replace('_KEY', ''));
+  const tKv = Date.now() - t0;
 
-  const diagFolder = await kvGetKey(env, 'DIAG_FOLDER_ID') || '';
-  const mcpDriveUrl = await kvGetKey(env, 'MCP_DRIVE_URL') || '';
-
-  // YouTube server keys count (for client display)
-  const ytKeysRaw = await kvGetKey(env, 'YOUTUBE_KEYS');
+  // YouTube server keys count (for client display) + daily usage counter
   const ytKeysCount = ytKeysRaw ? ytKeysRaw.split(',').filter(k => k.trim()).length : 0;
-
-  // YouTube daily usage counter
-  const today = new Date().toISOString().slice(0, 10);
-  const ytUsedRaw = await env.GATEWAY_KV.get(`ytusage:${today}`);
   const ytUsed = parseInt(ytUsedRaw || '0', 10);
 
-  // YouTube quota health check — videos.list costs 1 unit (vs 100 for search.list)
+  // YouTube quota health check — videos.list costs 1 unit (vs 100 for search.list).
+  // null = pas de reponse dans le delai (inconnu), jamais un faux « quota epuise ».
   let ytQuotaOk = null;
   if (ytKeysRaw) {
     const testKeys = ytKeysRaw.split(',').map(k => k.trim()).filter(Boolean);
     // Test 2 keys from different positions (likely different projects)
     const toTest = [testKeys[0], testKeys[Math.floor(testKeys.length / 2)]].filter(Boolean);
-    ytQuotaOk = false;
     for (const tk of toTest) {
       try {
-        const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=id&id=dQw4w9WgXcQ&key=${encodeURIComponent(tk)}`);
+        const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=id&id=dQw4w9WgXcQ&key=${encodeURIComponent(tk)}`,
+                              { signal: AbortSignal.timeout(1500) });
         if (r.ok) { ytQuotaOk = true; break; }
-      } catch (_) {}
+        ytQuotaOk = false;
+      } catch (_) { /* delai depasse ou reseau : on laisse l'etat precedent */ }
     }
   }
 
-  return jsonResponse({ worker_url: workerUrl, apis, version: VERSION, diag_folder: diagFolder, mcp_drive_url: mcpDriveUrl, yt_server_keys: ytKeysCount, yt_server_used: ytUsed, yt_quota_ok: ytQuotaOk });
+  return jsonResponse({ worker_url: workerUrl || '', apis, version: VERSION, diag_folder: diagFolder || '', mcp_drive_url: mcpDriveUrl || '',
+    yt_server_keys: ytKeysCount, yt_server_used: ytUsed, yt_quota_ok: ytQuotaOk, t_ms: { kv: tKv, yt: Date.now() - t0 - tKv } });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
