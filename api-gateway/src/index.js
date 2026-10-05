@@ -47,7 +47,7 @@ import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMote
   from './stt_moteur.js';   // v1.64 : interrupteur de moteur de transcription par app + relais MAI
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.73';   // 1.73 (05/10) : /config liste les NOMS de cles (1 list au lieu de 17 lectures) -- key:GROQ_KEY se lisait en 5,08 s au datacenter CDG ; journal de mesure 1.71-1.72 retire. 1.72 (05/10) : [config-timing] detaille chaque lecture lente et chaque test YouTube. 1.71 (05/10) : journal [config-timing] (auth / config / colo) pour la lenteur mobile. 1.70 (05/10) : /config rapide (lectures KV en parallele, test YouTube borne a 1,5 s, t_ms dans la reponse) -- 5,1 s depuis le reseau mobile faisait passer la LED GWY de SubWhisper au rouge. 1.69 (05/10) : alerte panne MAI seulement a la 2e panne en < 10 min (un 520 isole rattrape par le reessai alertait pour rien). 1.68 (03/10) : app `jarvis` (menu restreint MAI / Groq, defaut Groq) dans l'interrupteur du dashboard ; X-Stt-App: jarvis impute ses pannes et ses secondes a part. 1.67 (03/10) : secondes MAI facturees comptees par app (jour + mois), lues au dashboard. 1.66 (03/10) : seuls 5xx/401/403/429/reseau comptent comme panne MAI (un 400 = la requete, pas MAI). 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
+const VERSION = '1.74';   // 1.74 (05/10) : cles d'API en cache memoire 60 s par isolat + lectures KV > 1 s tracees ('#kv-lent') -- GROQ_KEY a 5 s au datacenter CDG. 1.73 (05/10) : /config liste les NOMS de cles (1 list au lieu de 17 lectures) -- key:GROQ_KEY se lisait en 5,08 s au datacenter CDG ; journal de mesure 1.71-1.72 retire. 1.72 (05/10) : [config-timing] detaille chaque lecture lente et chaque test YouTube. 1.71 (05/10) : journal [config-timing] (auth / config / colo) pour la lenteur mobile. 1.70 (05/10) : /config rapide (lectures KV en parallele, test YouTube borne a 1,5 s, t_ms dans la reponse) -- 5,1 s depuis le reseau mobile faisait passer la LED GWY de SubWhisper au rouge. 1.69 (05/10) : alerte panne MAI seulement a la 2e panne en < 10 min (un 520 isole rattrape par le reessai alertait pour rien). 1.68 (03/10) : app `jarvis` (menu restreint MAI / Groq, defaut Groq) dans l'interrupteur du dashboard ; X-Stt-App: jarvis impute ses pannes et ses secondes a part. 1.67 (03/10) : secondes MAI facturees comptees par app (jour + mois), lues au dashboard. 1.66 (03/10) : seuls 5xx/401/403/429/reseau comptent comme panne MAI (un 400 = la requete, pas MAI). 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
 //    // 1.63 (27/09) : retrait de la route DELETE ElevenLabs de la 1.62 -- inutile (voix de la bibliotheque utilisables sans ajout)
 // v1.59 (21/09/2026) — runSoldeWatch : sondes de SOLDE pour deepseek, moonshot-kimi, runpod, piapi
 // (les 4 fournisseurs rechargeables, jusque-la angles morts du cost watch). Voir la fonction.
@@ -2632,15 +2632,35 @@ async function runLtxReaper(env, opts = {}) {
   return out;
 }
 
+// v1.74 (05/10) : cache memoire PAR ISOLAT (60 s) des cles d'API. Mesure du 05/10 : au datacenter CDG,
+// `key:GROQ_KEY` se lisait en 5,08 s A CHAQUE appel (cache KV local inoperant pour cette cle) ; /config en
+// est sorti (v1.73, list des noms) mais /api/groq a besoin de la VALEUR. Avec ce cache, une lecture lente
+// coute au pire 1 fois par minute et par isolat, plus a chaque appel. 60 s = delai max de prise en compte
+// d'une rotation faite ailleurs (le set/delete local invalide tout de suite).
+// Toute lecture > 1 s est tracee dans Analytics Engine (blob1 = '#kv-lent') : la lenteur se MESURE.
+const _cacheCles = new Map();
+const CACHE_CLES_MS = 60 * 1000;
+
 async function kvGetKey(env, name) {
-  return env.GATEWAY_KV.get(`key:${name}`);
+  const c = _cacheCles.get(name);
+  if (c && Date.now() - c.t < CACHE_CLES_MS) return c.v;
+  const d = Date.now();
+  const v = await env.GATEWAY_KV.get(`key:${name}`);
+  const ms = Date.now() - d;
+  if (ms > 1000 && env.GATEWAY_LOG) {
+    try { env.GATEWAY_LOG.writeDataPoint({ blobs: ['#kv-lent', name], doubles: [ms], indexes: ['#kv-lent'] }); } catch (_) { /* jamais bloquer */ }
+  }
+  _cacheCles.set(name, { v, t: Date.now() });
+  return v;
 }
 
 async function kvSetKey(env, name, value) {
+  _cacheCles.delete(name);
   return env.GATEWAY_KV.put(`key:${name}`, value);
 }
 
 async function kvDeleteKey(env, name) {
+  _cacheCles.delete(name);
   return env.GATEWAY_KV.delete(`key:${name}`);
 }
 
