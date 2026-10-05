@@ -39,7 +39,7 @@
 import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMoteur, etatMoteur, basculer, noterPanne, alerterPanne, cibleMai }
   from './stt_moteur.js';
 
-const VERSION = '1.27.0';   // 1.27.0 (05/10/2026) : alerte panne MAI seulement a la 2e panne en < 10 min (l'app reessaie 3 fois depuis v1.4.1 ; un 520 isole alertait pour rien). 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
+const VERSION = '1.28.0';   // 1.28.0 (05/10/2026) : /config liste les NOMS de cles (1 list au lieu de 5 lectures de valeurs). 1.27.0 (05/10/2026) : alerte panne MAI seulement a la 2e panne en < 10 min (l'app reessaie 3 fois depuis v1.4.1 ; un 520 isole alertait pour rien). 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
 // v1.25.3 (2026-10-01) - API Polar : version EPINGLEE (en-tete Polar-Version).
 //   Polar versionne son API par trimestre depuis le 01/10/2026 ; sans en-tete, un appel suit la
 //   version courante et son contrat change sous nos pieds a chaque release. 2026-10 verifiee le
@@ -1365,13 +1365,12 @@ export default {
       if (!proKey) return err('X-Pro-Key required', 401);
       const proData = await validateProKey(proKey, env);
       if (!proData) return err('Invalid key', 403);
-      // Check which API keys are configured
+      // Check which API keys are configured -- v1.28.0 (05/10) : un list() des NOMS (+ secrets wrangler) au lieu de
+      // 5 lectures de VALEURS en serie. Sur la gateway principale, une seule cle se lisait en 5 s au datacenter CDG
+      // et faisait passer la LED de connexion au rouge ; /config n'a besoin que de savoir si la cle existe.
       const apiNames = ['GEMINI', 'GROQ', 'ASSEMBLYAI', 'DEEPSEEK', 'AZURE'];
-      const apis = [];
-      for (const name of apiNames) {
-        const key = await getApiKey(name + '_KEY', env);
-        if (key) apis.push(name);
-      }
+      const noms = new Set((await env.PRO_KV.list({ prefix: 'apikey:' })).keys.map(k => k.name));
+      const apis = apiNames.filter(name => noms.has(`apikey:${name}_KEY`) || env[name + '_KEY']);
       const mk = monthKey();
       const monthly = (proData.monthlyUsage && proData.monthlyUsage[mk]) || { transcriptions: 0, translations: 0 };
       const limits = PLAN_LIMITS[proData.plan] || PLAN_LIMITS.pro;
