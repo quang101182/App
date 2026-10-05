@@ -110,11 +110,14 @@ for (const [nom, ok, detail] of await batterie(actuel)) {
   console.log(`  ${ok ? 'OK   ' : 'ECHEC'} ${nom}  — ${detail}`);
 }
 
-console.log('\nMUTATION — la même batterie contre la version d\'avant (HEAD) DOIT rougir');
+// v1.27.0 (05/10) : la reference etait HEAD -- valable AVANT le commit du correctif, plus apres (HEAD = le code
+// corrige, la mutation ne pouvait plus rougir). Figee sur le parent du correctif d63e13d, comme test_quota_reussite.
+const COMMIT_AVANT = 'd63e13d~1';
+console.log(`\nMUTATION — la même batterie contre la version d'avant le correctif (${COMMIT_AVANT}) DOIT rougir`);
 let dossier;
 try {
   const racine = execSync('git rev-parse --show-toplevel', { cwd: ICI }).toString().trim();
-  const source = execSync('git show HEAD:api-gateway-pro/src/index.js', { cwd: racine, maxBuffer: 16 << 20 });
+  const source = execSync(`git show ${COMMIT_AVANT}:api-gateway-pro/src/index.js`, { cwd: racine, maxBuffer: 16 << 20 });
   dossier = mkdtempSync(join(tmpdir(), 'banc-gemini-'));
   const fichier = join(dossier, 'index_avant.mjs');
   writeFileSync(fichier, source);

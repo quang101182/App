@@ -181,7 +181,9 @@ console.log('\nMUTATION 2 — « attendre le fournisseur PUIS inscrire le décom
 let dossier2;
 try {
   const { readFileSync } = await import('node:fs');
-  const source = readFileSync(join(ICI, '../src/index.js'), 'utf8');
+  // v1.27.0 (05/10) : fichier en CRLF -> '\n}\n' introuvable ; et index.js importe stt_moteur.js (v1.26.0) :
+  // on normalise les fins de ligne et on copie le module a cote de la version sabotee.
+  const source = readFileSync(join(ICI, '../src/index.js'), 'utf8').split('\r\n').join('\n');
   const debut = source.indexOf('function relayerEtCompter(');
   const fin = source.indexOf('\n}\n', debut);
   if (debut < 0 || fin < 0) throw new Error('relayerEtCompter introuvable');
@@ -194,7 +196,8 @@ try {
   dossier2 = mkdtempSync(join(tmpdir(), 'banc-quota2-'));
   const fichier = join(dossier2, 'index_attendre_puis_compter.mjs');
   writeFileSync(fichier, sabote);
-  const mute = (await import(pathToFileURL(fichier).href)).default;
+  writeFileSync(join(dossier2, 'stt_moteur.js'), readFileSync(join(ICI, '../src/stt_moteur.js')));
+  const mute =(await import(pathToFileURL(fichier).href)).default;
   const rouges = (await batterie(mute)).filter(([, ok]) => !ok).map(([nom]) => nom);
   const nom = 'client qui coupe : décompte confié à waitUntil AVANT le fournisseur';
   const rouge = rouges.includes(nom);
