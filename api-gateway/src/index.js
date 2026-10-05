@@ -47,7 +47,7 @@ import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMote
   from './stt_moteur.js';   // v1.64 : interrupteur de moteur de transcription par app + relais MAI
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.68';   // 1.68 (03/10) : app `jarvis` (menu restreint MAI / Groq, defaut Groq) dans l'interrupteur du dashboard ; X-Stt-App: jarvis impute ses pannes et ses secondes a part. 1.67 (03/10) : secondes MAI facturees comptees par app (jour + mois), lues au dashboard. 1.66 (03/10) : seuls 5xx/401/403/429/reseau comptent comme panne MAI (un 400 = la requete, pas MAI). 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
+const VERSION = '1.69';   // 1.69 (05/10) : alerte panne MAI seulement a la 2e panne en < 10 min (un 520 isole rattrape par le reessai alertait pour rien). 1.68 (03/10) : app `jarvis` (menu restreint MAI / Groq, defaut Groq) dans l'interrupteur du dashboard ; X-Stt-App: jarvis impute ses pannes et ses secondes a part. 1.67 (03/10) : secondes MAI facturees comptees par app (jour + mois), lues au dashboard. 1.66 (03/10) : seuls 5xx/401/403/429/reseau comptent comme panne MAI (un 400 = la requete, pas MAI). 1.65 (03/10) : /admin/stt-engine accepte aussi DASH_STT_TOKEN (jeton du dashboard, limite a cette route). 1.64 (03/10) : MAI-Transcribe-2 pour le sous-titrage -- POST /api/mai (relais Azure, compteur 60/min), GET /api/stt-engine?app=, GET|POST /admin/stt-engine?app= (interrupteur PAR APP pilote au dashboard), alerte Telegram <= 1/h sur panne MAI, AUCUNE bascule auto. Module src/stt_moteur.js.
 //    // 1.63 (27/09) : retrait de la route DELETE ElevenLabs de la 1.62 -- inutile (voix de la bibliotheque utilisables sans ajout)
 // v1.59 (21/09/2026) — runSoldeWatch : sondes de SOLDE pour deepseek, moonshot-kimi, runpod, piapi
 // (les 4 fournisseurs rechargeables, jusque-la angles morts du cost watch). Voir la fonction.
@@ -762,7 +762,7 @@ async function proxyAzure(request, env, parsedUrl) {
  * Corps multipart (`audio` + `definition`) relaye TEL QUEL : c'est l'app qui demande
  * `enhancedMode.modelOptions.timestamps = "word"` (sans lui MAI rend UNE phrase sans aucun timing).
  * En-tete optionnel `X-Stt-App` (defaut `soustitrage`) : a qui imputer une panne.
- * Panne (HTTP non 2xx ou reseau) : compteur + derniere erreur + alerte Telegram <= 1/h avec le lien du
+ * Panne (HTTP non 2xx ou reseau) : compteur + derniere erreur + alerte Telegram <= 1/h (des la 2e panne en < 10 min) avec le lien du
  * dashboard. AUCUNE bascule automatique (decision Quang 03/10, comme DictoKey) : l'app recoit l'erreur.
  */
 async function proxyMai(request, env, ctx) {
@@ -772,7 +772,8 @@ async function proxyMai(request, env, ctx) {
   const app = APPS_STT[(request.headers.get('X-Stt-App') || '').toLowerCase()] ? request.headers.get('X-Stt-App').toLowerCase() : 'soustitrage';
   const upstream = await cibleMai(env.GATEWAY_KV);
   const panne = async (status, message) => {
-    await noterPanne(env.GATEWAY_KV, app, status, message);
+    // v1.69 : une panne isolee (rattrapee par le reessai de l'app) n'alerte plus, la 2e en < 10 min oui
+    if (!(await noterPanne(env.GATEWAY_KV, app, status, message))) return;
     await alerterPanne(env.GATEWAY_KV, app, `HTTP ${status} ${message}`, (t) => costWatchTelegram(env, t));
   };
   let res;

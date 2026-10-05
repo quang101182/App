@@ -149,9 +149,12 @@ async function batterie(worker) {
   ok('panne : erreur relayee (pas de bascule)', r.status === 500 && journal.azure.length === 4);
   ok('panne : compteur 1 + derniere erreur', env.GATEWAY_KV.store.get(`stt:err:soustitrage:${jour()}`) === '1'
      && JSON.parse(env.GATEWAY_KV.store.get('stt:last_error:soustitrage')).status === 500);
-  ok('panne : 1 alerte Telegram avec le lien du dashboard', journal.tg.length === 1 && journal.tg[0].includes('dash.se7enai.com'));
+  ok('panne isolee : AUCUNE alerte (le reessai de l app peut la rattraper)', journal.tg.length === 0);
   r = await appel('POST', '/api/mai', { auth: ws, body: corps });
-  ok('2e panne la meme heure : compteur 2, PAS de 2e alerte', env.GATEWAY_KV.store.get(`stt:err:soustitrage:${jour()}`) === '2' && journal.tg.length === 1);
+  ok('2e panne en < 10 min : 1 alerte Telegram avec le lien du dashboard', env.GATEWAY_KV.store.get(`stt:err:soustitrage:${jour()}`) === '2'
+     && journal.tg.length === 1 && journal.tg[0].includes('dash.se7enai.com'));
+  r = await appel('POST', '/api/mai', { auth: ws, body: corps });
+  ok('3e panne la meme heure : compteur 3, PAS de 2e alerte', env.GATEWAY_KV.store.get(`stt:err:soustitrage:${jour()}`) === '3' && journal.tg.length === 1);
 
   // Telegram en echec : le drapeau ne doit PAS etre pose -> la panne suivante realerte
   for (const k of [...env.GATEWAY_KV.store.keys()]) if (k.startsWith('alert:stt_panne:')) env.GATEWAY_KV.store.delete(k);
@@ -161,6 +164,12 @@ async function batterie(worker) {
   await appel('POST', '/api/mai', { auth: ws, body: corps });
   ok('Telegram refuse -> drapeau non pose -> la panne suivante realerte', journal.tg.length === 3);
 
+  // v1.69 : panne precedente vieille de 11 min -> la nouvelle est isolee, pas d'alerte (drapeaux effaces)
+  for (const k of [...env.GATEWAY_KV.store.keys()]) if (k.startsWith('alert:stt_panne:')) env.GATEWAY_KV.store.delete(k);
+  env.GATEWAY_KV.store.set('stt:last_error:soustitrage', JSON.stringify({ ts: new Date(Date.now() - 11 * 60000).toISOString(), status: 500, message: '' }));
+  await appel('POST', '/api/mai', { auth: ws, body: corps });
+  ok('panne precedente > 10 min : PAS d alerte', journal.tg.length === 3);
+
   scenario.azure = 'throw';
   r = await appel('POST', '/api/mai', { auth: ws, body: corps });
   ok('reseau coupe -> 502 stt_indisponible', r.status === 502 && r.json.error === 'stt_indisponible');
@@ -168,7 +177,7 @@ async function batterie(worker) {
   // ── l'admin voit la panne
   r = await appel('GET', '/admin/stt-engine?app=soustitrage', { auth: adm });
   ok('admin voit les secondes MAI du mois + prix', r.json.mai_secondes_mois === 360 && r.json.mai_prix_heure === 0.1);
-  ok('admin voit pannes du jour + derniere erreur', r.json.errors_today === 5 && r.json.last_error && r.json.engine === 'mai2');
+  ok('admin voit pannes du jour + derniere erreur', r.json.errors_today === 7 && r.json.last_error && r.json.engine === 'mai2');
   return res;
 }
 
@@ -204,6 +213,11 @@ async function mutation(titre, fichierSrc, cible, remplacement, attendu) {
 
 await mutation('drapeau d\'alerte pose meme si Telegram refuse', 'stt_moteur.js',
   'if (r && r.sent) await kv.put(k', 'await kv.put(k', 'Telegram refuse -> drapeau non pose -> la panne suivante realerte');
+await mutation('alerte des la 1re panne (sans recidive)', 'index.js',
+  'if (!(await noterPanne(env.GATEWAY_KV, app, status, message))) return;', 'await noterPanne(env.GATEWAY_KV, app, status, message);',
+  'panne isolee : AUCUNE alerte (le reessai de l app peut la rattraper)');
+await mutation('fenetre de recidive ignoree', 'stt_moteur.js',
+  'recidive = age >= 0 && age < FENETRE_RECIDIVE_MS;', 'recidive = true;', 'panne precedente > 10 min : PAS d alerte');
 await mutation('moteur non valide a la bascule', 'stt_moteur.js',
   'if (!moteursDe(app).includes(cible)) {', 'if (false) {', 'moteur inconnu refuse (400) et rien n\'est ecrit');
 await mutation('menu jarvis non restreint', 'stt_moteur.js',
