@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.65</title>
+<title>SubWhisper v9.66</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1143,7 +1143,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.65</span>
+    <span class="ver-badge">v9.66</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1488,7 +1488,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.65 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.66 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -1799,7 +1799,23 @@ function getGatewayKey() {
 }
 var GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 
-async function fetchGatewayConfig() {
+// v9.66 (05/10) : au demarrage DEUX verifications partent (0,3 s puis 1,5 s via pingAllApis) et peuvent se
+// chevaucher. Seule la PLUS RECENTE decide de la LED (une ancienne, lente ou en echec, ne repeint plus le
+// rouge par-dessus un vert). Et une erreur JS APRES une connexion reussie n'est plus affichee « erreur reseau ».
+var _gwSeq = 0, _gwEnCours = null, _gwCleEnCours = null;
+// Une seule verification EN COURS par cle : un 2e appel pendant la 1re (pingAllApis a 1,5 s) attend son
+// resultat au lieu d'en lancer une autre qui pourrait expirer et repeindre la LED en rouge.
+function fetchGatewayConfig() {
+  var gk = getGatewayKey();
+  if (_gwEnCours && _gwCleEnCours === gk) return _gwEnCours;
+  _gwCleEnCours = gk;
+  var p = _fetchGatewayConfig();
+  _gwEnCours = p;
+  p.then(function() { if (_gwEnCours === p) _gwEnCours = null; }, function() { if (_gwEnCours === p) _gwEnCours = null; });
+  return p;
+}
+async function _fetchGatewayConfig() {
+  var seq = ++_gwSeq, connecte = false, minuteur = null;
   var gk = getGatewayKey();
   if (!gk) {
     setDot('GWY','none');
@@ -1817,11 +1833,13 @@ async function fetchGatewayConfig() {
   setDot('GWY','key');
   document.getElementById('gatewayInfo').textContent = '⏳ Connexion...';
   try {
-    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 8000);
+    var ctrl = new AbortController(); minuteur = setTimeout(function(){ ctrl.abort(); }, 12000);   // 8 s -> 12 s : marge reseau mobile
     var resp = await fetch(GATEWAY_URL + '/config', { headers:{ 'Authorization':'Bearer '+gk }, signal:ctrl.signal });
+    if (seq !== _gwSeq) return;
     if (!resp.ok) { setDot('GWY','err'); document.getElementById('gatewayInfo').textContent = '❌ Secret invalide'; return; }
     var cfg = await resp.json();
-    setDot('GWY','ok');
+    if (seq !== _gwSeq) return;   // une verification plus recente a pris le relais
+    setDot('GWY','ok'); connecte = true;
     var apis = cfg.apis || [];
     document.getElementById('gatewayInfo').textContent = '✅ ' + apis.length + ' APIs: ' + (apis.join(', ') || '—');
     // Allumer les dots individuels selon les APIs actives dans le gateway
@@ -1840,9 +1858,11 @@ async function fetchGatewayConfig() {
     updateRequiredBlink(); checkAIEngine();
     updateSbtn();
   } catch(e) {
+    if (seq !== _gwSeq) return;
+    if (connecte) { console.error('[gateway] erreur apres connexion', e); return; }
     setDot('GWY','err');
     document.getElementById('gatewayInfo').textContent = '❌ Erreur réseau';
-  }
+  } finally { clearTimeout(minuteur); }
 }
 
 function toggleKey(inputId, btnId) {
@@ -4751,7 +4771,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.64',
+    version: 'v9.66',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
