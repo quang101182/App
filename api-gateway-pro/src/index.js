@@ -38,8 +38,9 @@
 
 import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMoteur, etatMoteur, basculer, noterPanne, alerterPanne, cibleMai }
   from './stt_moteur.js';
+import { compterCout, moteurGroq, dureeWav, lireCouts } from './stt_cout.js';   // v1.29.0 (P8) : cout des transcriptions
 
-const VERSION = '1.28.0';   // 1.28.0 (05/10/2026) : /config liste les NOMS de cles (1 list au lieu de 5 lectures de valeurs). 1.27.0 (05/10/2026) : alerte panne MAI seulement a la 2e panne en < 10 min (l'app reessaie 3 fois depuis v1.4.1 ; un 520 isole alertait pour rien). 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
+const VERSION = '1.29.0';   // 1.29.0 (06/10/2026) : cout des transcriptions par moteur (P8) -- un evenement KV par transcription MAI ou Groq (aucune perte en parallele), GET /admin/stt-cout lu par le dashboard (onglet Moteurs). Module src/stt_cout.js (copie identique de la gateway principale). Aucun changement de reponse pour l'app. 1.28.0 (05/10/2026) : /config liste les NOMS de cles (1 list au lieu de 5 lectures de valeurs). 1.27.0 (05/10/2026) : alerte panne MAI seulement a la 2e panne en < 10 min (l'app reessaie 3 fois depuis v1.4.1 ; un 520 isole alertait pour rien). 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
 // v1.25.3 (2026-10-01) - API Polar : version EPINGLEE (en-tete Polar-Version).
 //   Polar versionne son API par trimestre depuis le 01/10/2026 ; sans en-tete, un appel suit la
 //   version courante et son contrat change sous nos pieds a chaque release. 2026-10 verifiee le
@@ -386,8 +387,12 @@ async function proxyMai(request, env, ctx) {
     const copie = resp.clone();
     ctx.waitUntil(copie.text().catch(() => '').then((t) => panne(resp.status, t.slice(0, 200))));
   } else if (resp.ok) {
+    // v1.29.0 (P8) : + cout par moteur (evenement unique par transcription, voir stt_cout.js)
     const copie = resp.clone();
-    ctx.waitUntil(copie.json().then((j) => compterSecondes(env.PRO_KV, app, j && j.durationMilliseconds)).catch(() => {}));
+    ctx.waitUntil(copie.json().then((j) => Promise.all([
+      compterSecondes(env.PRO_KV, app, j && j.durationMilliseconds),
+      compterCout(env.PRO_KV, app, 'mai2', (Number(j && j.durationMilliseconds) || 0) / 1000),
+    ])).catch(() => {}));
   }
   return new Response(resp.body, {
     status: resp.status,
@@ -395,21 +400,34 @@ async function proxyMai(request, env, ctx) {
   });
 }
 
-async function proxyGroq(request, env) {
+async function proxyGroq(request, env, ctx) {
   const key = await getApiKey('GROQ_KEY', env);
   if (!key) return err('Groq API key not configured', 503);
   const ct = request.headers.get('Content-Type') || '';
   const headers = { 'Authorization': `Bearer ${key}` };
   if (ct) headers['Content-Type'] = ct;
+  const copieReq = request.clone();   // v1.29.0 (P8) : modele + fichier relus APRES la reponse, hors chemin critique
   const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST',
     headers,
     body: request.body,
   });
+  if (resp.ok && ctx) ctx.waitUntil(compterGroq(env, copieReq, resp.clone()).catch(() => {}));
+  else if (copieReq.body) copieReq.body.cancel().catch(() => {});   // copie inutile : liberee tout de suite
   return new Response(resp.body, {
     status: resp.status,
     headers: { ...CORS_HEADERS, 'Content-Type': resp.headers.get('Content-Type') || 'application/json' },
   });
+}
+
+// v1.29.0 (P8) - duree lue dans la reponse (verbose_json, ce que demande l'app), sinon dans l'en-tete du WAV
+async function compterGroq(env, copieReq, copieResp) {
+  let j = null, modele = '', fichier = null;
+  try { j = await copieResp.json(); } catch { /* format texte */ }
+  try { const fd = await copieReq.formData(); modele = String(fd.get('model') || ''); fichier = fd.get('file'); } catch { /* illisible */ }
+  let sec = Number(j && j.duration) || 0;
+  if (!sec && fichier && typeof fichier.arrayBuffer === 'function') sec = dureeWav(await fichier.arrayBuffer());
+  await compterCout(env.PRO_KV, 'swp', moteurGroq(modele), sec);
 }
 
 async function proxyAssemblyAI(request, env) {
@@ -1392,6 +1410,11 @@ export default {
         return json(r.body, r.status);
       }
 
+      // v1.29.0 (P8) - cout des transcriptions de SubWhisper Pro, par jour (Paris) et par moteur
+      if (path === '/admin/stt-cout' && method === 'GET') {
+        return json(await lireCouts(env.PRO_KV, ['swp']));
+      }
+
       // Set API key
       if (path === '/admin/keys/set' && method === 'POST') {
         const body = await request.json();
@@ -1825,7 +1848,7 @@ export default {
 
       // Groq proxy
       if (path === '/api/groq') {
-        return relayerEtCompter(proxyGroq(request, env), proKey, 'transcription', env, ctx);
+        return relayerEtCompter(proxyGroq(request, env, ctx), proKey, 'transcription', env, ctx);
       }
 
       // AssemblyAI proxy - seule la CREATION d'une transcription compte (ni l'upload, ni le suivi GET).

@@ -244,6 +244,33 @@
     .stt-btn:hover { background: rgba(127,127,127,.15); }
     .stt-btn[disabled] { opacity: .5; cursor: wait; }
     .stt-foot { font-size: 12px; opacity: .65; margin-top: 8px; }
+    /* v2.44.0 (P8) — Coût des transcriptions */
+    .cout-tuiles { margin: 4px 0 12px; }
+    .cout-tuiles .kpi-tile { min-height: 0; padding: 12px 14px; }
+    .cout-tuiles .kpi-value { font-size: 1.5rem; }
+    .cout-table th:not(:first-child), .cout-table td.cout-num { text-align: right; white-space: nowrap; }
+    .cout-table td.cout-num b { font-variant-numeric: tabular-nums; font-weight: 700; }
+    .cout-dur { display: block; font-size: 11px; opacity: .6; font-weight: 400; font-variant-numeric: tabular-nums; }
+    .cout-detail { font-size: 12px; opacity: .7; }
+    .cout-est { text-decoration: underline dotted; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: help; }
+    .cout-lu { font-size: 12px; opacity: .6; margin-left: auto; }
+    /* mobile : une carte par application (nom en haut, 5 montants en grille, chacun avec son libellé) */
+    @media (max-width: 640px) {
+      .cout-table thead { display: none; }
+      .cout-table, .cout-table tbody { display: block; }
+      .cout-table tr { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px 2px; padding: 9px 8px; margin-bottom: 6px;
+        border-radius: var(--radius-sm); background: rgba(127,127,127,.08); }
+      .cout-table tr.cout-total { background: rgba(127,127,127,.18); }
+      .cout-table td, .cout-table td:first-child, .cout-table td:last-child { display: block; background: none !important; padding: 0 !important; border-radius: 0; box-shadow: none !important; }
+      .cout-table td:first-child { grid-column: 1 / -1; min-width: 0; margin-bottom: 4px; }
+      .cout-table td.cout-num { text-align: center; white-space: normal; }
+      .cout-table td.cout-num::before { content: attr(data-l); display: block; font-size: 9.5px; opacity: .6; text-transform: uppercase; letter-spacing: .02em; margin-bottom: 1px; }
+      .cout-table td.cout-num b { font-size: 12.5px; }
+      .cout-dur { font-size: 10px; }
+      .cout-dur-s { display: none; }
+    }
+    .cout-table tr.cout-total td { background: rgba(127,127,127,.18); }
+    .cout-table td:first-child { min-width: 200px; }
     .trend-item { display: flex; align-items: baseline; gap: 8px; flex: 1 1 190px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
     .trend-label { color: var(--ink-faint); font-size: .68rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
     .trend-val { margin-left: auto; font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -618,7 +645,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.43.0-essentiel-sv-dkpc';
+    const VERSION = 'v2.44.0-cout-transcriptions';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -2364,6 +2391,157 @@
              panne: "en cas de panne MAI, Jarvis affiche « MAI en panne » au lieu de transcrire (pas de retour sur Groq)" },
     };
 
+    // ── v2.44.0 (P8) — Coût des transcriptions, en tête de l'onglet Moteurs ─────────────────────────
+    // 4 passerelles, lues EN DIRECT (GET /admin/stt-cout) : chacune renvoie, par app, le coût de chaque jour
+    // (jour civil de Paris) et par moteur. Tout se calcule ici à partir des jours : rien n'est recopié en dur.
+    // Un montant « ≈ » contient une part reconstituée depuis les anciens compteurs (avant le 06/10/2026).
+    const COUT_SOURCES = [
+      { id: 'main', nom: 'passerelle principale', base: ST_GATEWAY, jeton: 'st' },
+      { id: 'pro', nom: 'passerelle Pro', base: 'https://api-gateway-pro.quang101182.workers.dev', jeton: 'swp' },
+      { id: 'dk', nom: 'passerelle DictoKey Android', base: DK_GATEWAY, jeton: 'dk' },
+      { id: 'dkpc', nom: 'passerelle DictoKey PC', base: DKPC_GATEWAY, jeton: 'dkpc' },
+    ];
+    // Ordre d'affichage. `src` = les passerelles qui portent l'app (DictoKey PC peut figurer dans les deux DictoKey).
+    const COUT_APPS = [
+      { app: 'dk', nom: 'DictoKey Android', src: ['dk'] },
+      { app: 'dkpc', nom: 'DictoKey PC', src: ['dkpc', 'dk'] },
+      { app: 'swp', nom: 'SubWhisper Pro', src: ['pro'] },
+      { app: 'soustitrage', nom: 'Sous-titrage', detail: 'SubWhisper + Télégramme Vidéo', src: ['main'] },
+      { app: 'jarvis', nom: 'Jarvis', src: ['main'] },
+      { app: 'autre', nom: 'Autres apps', detail: 'transcriptions sans app identifiée', src: ['main'], siNonNul: true },
+    ];
+    const COUT_MOTEUR_COURT = { 'mai2': 'MAI', 'mai2-openrouter': 'MAI (OpenRouter)', 'groq-turbo': 'Groq', 'groq-v3': 'Groq large-v3', 'gemini': 'Gemini', 'openai': 'OpenAI', 'openai-mini': 'OpenAI mini', 'openrouter': 'OpenRouter' };
+    const MOIS_COURT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+    function coutPlaceholder() {
+      setTimeout(coutLoad, 0);
+      return `<div id="cout-bloc" class="stt-banner cout-bloc"><div class="stt-head"><span class="stt-title">Coût des transcriptions</span><span class="stt-main">lecture en direct…</span></div></div>`;
+    }
+
+    async function coutLoad() {
+      if (!document.getElementById('cout-bloc')) return;
+      const lus = await Promise.all(COUT_SOURCES.map(async s => {
+        const tok = getToken(getApp(s.jeton));
+        if (!tok) return { ...s, erreur: 'jeton absent' };
+        try {
+          const r = await fetch(`${s.base}/admin/stt-cout`, { headers: { Authorization: `Bearer ${tok}` }, cache: 'no-store' });
+          if (!r.ok) return { ...s, erreur: `HTTP ${r.status}` };
+          return { ...s, data: await r.json() };
+        } catch (e) { return { ...s, erreur: e.message || 'réseau' }; }
+      }));
+      const el = document.getElementById('cout-bloc');
+      if (el) el.outerHTML = coutRender(lus);
+    }
+
+    // AAAA-MM-JJ décalé de n jours (calcul sur la date seule, à midi UTC : aucun piège d'heure d'été)
+    const coutJour = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+    const coutMoisDebut = (iso, nMois) => { const d = new Date(iso.slice(0, 7) + '-01T12:00:00Z'); d.setUTCMonth(d.getUTCMonth() - nMois); return d.toISOString().slice(0, 7); };
+    const coutFr = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+
+    function coutSomme(jours, filtre) {
+      const t = { u: 0, s: 0, nm: 0, est: false, moteurs: {} };
+      for (const [j, parMoteur] of Object.entries(jours || {})) {
+        if (!filtre(j)) continue;
+        for (const [m, v] of Object.entries(parMoteur)) {
+          t.u += v.u || 0; t.s += v.s || 0; t.nm += v.nm || 0; if (v.est) t.est = true;
+          t.moteurs[m] = (t.moteurs[m] || 0) + (v.u || 0);
+        }
+      }
+      return t;
+    }
+
+    function coutDollars(u) {
+      if (!u) return '0 $';
+      if (u < 0.01) return '< 0,01 $';
+      return u.toFixed(u < 100 ? 2 : 0).replace('.', ',') + ' $';
+    }
+    const COUT_EST_TITRE = 'inclut une part reconstituée depuis les anciens compteurs (avant le comptage complet)';
+    const coutMontant = t => `<b class="${t.est ? 'cout-est' : ''}"${t.est ? ` title="${COUT_EST_TITRE}"` : ''}>${safeText(coutDollars(t.u))}</b>`;
+    const coutTuile = (label, t, note) => `<article class="kpi-tile"><div class="kpi-label">${safeText(label)}</div><div class="kpi-value">${coutMontant(t)}</div><div class="kpi-note">${safeText(note)}</div></article>`;
+    function coutDuree(s) {
+      if (!s) return '';
+      if (s < 60) return `${Math.round(s)} s`;
+      if (s < 3600) return `${Math.round(s / 60)} min`;
+      return `${Math.floor(s / 3600)} h ${String(Math.round(s % 3600 / 60)).padStart(2, '0')}`;
+    }
+    // data-l : libellé de la colonne, affiché au-dessus du montant en vue mobile (cartes)
+    const coutCellule = (t, l) => `<td class="cout-num" data-l="${l}">${coutMontant(t)}${t.s ? `<span class="cout-dur">${safeText(coutDuree(t.s))}<span class="cout-dur-s"> d'audio</span></span>` : ''}</td>`;
+    const COUT_COLS = [['auj', 'Auj.'], ['hier', 'Hier'], ['mois', 'Mois'], ['m6', '6 mois'], ['m12', '12 mois']];
+    const coutCellules = t => COUT_COLS.map(([k, l]) => coutCellule(t[k] || { u: 0, s: 0 }, l)).join('');
+
+    function coutRender(lus) {
+      const ok = lus.filter(l => l.data);
+      if (!ok.length) return `<div id="cout-bloc" class="stt-banner stt-panne"><div class="stt-head"><span class="stt-title">Coût des transcriptions</span><span class="stt-main">Indisponible</span></div>`
+        + `<div class="stt-meta stt-err">${safeText(lus.map(l => `${l.nom} : ${l.erreur}`).join(' · '))}</div></div>`;
+      const auj = ok[0].data.aujourdhui;   // jour civil de Paris, donné par la passerelle
+      const hier = coutJour(auj, -1), mois = auj.slice(0, 7), debut6 = coutMoisDebut(auj, 5), debut12 = coutMoisDebut(auj, 11);
+      const debut7 = coutJour(auj, -7);
+      const FENETRES = {
+        auj: j => j === auj, hier: j => j === hier, mois: j => j.startsWith(mois),
+        m6: j => j.slice(0, 7) >= debut6, m12: j => j.slice(0, 7) >= debut12, sept: j => j >= debut7 && j < auj,
+      };
+      const sources = Object.fromEntries(lus.map(l => [l.id, l]));
+      const lignes = [], totaux = {}, manquantes = [];
+      let debutComplet = null, debutHisto = null;
+      for (const def of COUT_APPS) {
+        // jours de l'app, fusionnés sur ses passerelles (DictoKey PC : les deux passerelles DictoKey)
+        const jours = {}; let depuis = null, lue = false;
+        for (const id of def.src) {
+          const d = sources[id] && sources[id].data && sources[id].data.apps && sources[id].data.apps[def.app];
+          if (!d) continue;
+          lue = true;
+          for (const [j, pm] of Object.entries(d.jours || {})) {
+            const cible = jours[j] || (jours[j] = {});
+            for (const [m, v] of Object.entries(pm)) {
+              const c = cible[m] || (cible[m] = { s: 0, u: 0, n: 0, nm: 0 });
+              c.s += v.s || 0; c.u += v.u || 0; c.n += v.n || 0; c.nm += v.nm || 0; if (v.est) c.est = 1;
+            }
+          }
+          try { const p = JSON.parse(d.depuis); if (p && p.donnees && (!depuis || p.donnees < depuis.donnees)) depuis = p; } catch { /* absent */ }
+          if (depuis && depuis.donnees && (!debutHisto || depuis.donnees < debutHisto)) debutHisto = depuis.donnees;
+        }
+        if (!lue) { manquantes.push(def.nom); continue; }
+        const t = Object.fromEntries(Object.entries(FENETRES).map(([k, f]) => [k, coutSomme(jours, f)]));
+        if (def.siNonNul && !t.m12.u && !t.m12.nm) continue;
+        if (depuis && depuis.complet && (!debutComplet || depuis.complet > debutComplet)) debutComplet = depuis.complet;
+        for (const [k, v] of Object.entries(t)) {
+          const T = totaux[k] || (totaux[k] = { u: 0, s: 0, nm: 0, est: false });
+          T.u += v.u; T.s += v.s; T.nm += v.nm; if (v.est) T.est = true;
+        }
+        // sous-ligne : moteurs du mois (part du coût), historique disponible, transcriptions sans durée
+        const parts = Object.entries(t.mois.moteurs).filter(([, u]) => u > 0).sort((a, b) => b[1] - a[1]);
+        const notes = [parts.length ? 'ce mois : ' + parts.map(([m, u]) => { const pc = u / t.mois.u * 100; return `${COUT_MOTEUR_COURT[m] || m} ${pc < 1 ? '< 1' : Math.round(pc)} %`; }).join(' · ') : 'aucune transcription ce mois'];
+        if (depuis && depuis.donnees) notes.push(`compté depuis le ${coutFr(depuis.donnees)}`);
+        if (t.mois.nm) notes.push(`⚠ ${t.mois.nm} sans durée lisible ce mois (non chiffrées)`);
+        lignes.push(`<tr><td><span class="st-nom">${safeText(def.nom)}</span>${def.detail ? `<span class="cout-detail"> · ${safeText(def.detail)}</span>` : ''}<span class="st-note">${safeText(notes.join(' · '))}</span></td>`
+          + coutCellules(t) + '</tr>');
+      }
+      const T = k => totaux[k] || { u: 0, s: 0, nm: 0, est: false };
+      // rythme : moyenne des 7 derniers jours COMPLETS, ramenée à la longueur du mois en cours
+      const nbJoursMois = new Date(Date.UTC(+mois.slice(0, 4), +mois.slice(5, 7), 0)).getUTCDate();
+      const rythme = T('sept').u / 7 * nbJoursMois;
+      const rythmePartiel = debutComplet && debutComplet > debut7;
+      const libMois = m => MOIS_COURT[+m.slice(5, 7) - 1];
+      const tuiles = `<div class="kpi-grid cout-tuiles">`
+        + coutTuile("Aujourd'hui", T('auj'), `hier : ${coutDollars(T('hier').u)}`)
+        + coutTuile('Ce mois', T('mois'), `au rythme des 7 derniers jours : ≈ ${coutDollars(rythme)} par mois${rythmePartiel ? ' (provisoire jusqu\'au ' + coutFr(coutJour(debutComplet, 7)) + ')' : ''}`)
+        + coutTuile('6 derniers mois', T('m6'), `${libMois(debut6)} → ${libMois(mois)} ${mois.slice(0, 4)}${debutHisto && debutHisto.slice(0, 7) > debut6 ? ` · historique depuis le ${coutFr(debutHisto)}` : ''}`)
+        + coutTuile('12 derniers mois', T('m12'), `${libMois(debut12)} ${debut12.slice(0, 4)} → ${libMois(mois)} ${mois.slice(0, 4)}${debutHisto && debutHisto.slice(0, 7) > debut12 ? ` · historique depuis le ${coutFr(debutHisto)}` : ''}`)
+        + `</div>`;
+      const total = `<tr class="cout-total"><td><span class="st-nom">Total</span></td>`
+        + coutCellules(Object.fromEntries(COUT_COLS.map(([k]) => [k, T(k)]))) + '</tr>';
+      const table = `<div class="st-wrap"><table class="st-table cout-table"><thead><tr><th>Application</th><th>Aujourd'hui</th><th>Hier</th><th>Ce mois</th><th>6 mois</th><th>12 mois</th></tr></thead><tbody>${lignes.join('')}${total}</tbody></table></div>`;
+      const alertes = lus.filter(l => !l.data).map(l => `${l.nom} : ${l.erreur}`);
+      const err = alertes.length ? `<div class="stt-meta stt-err">Lecture impossible — ${safeText(alertes.join(' · '))}${manquantes.length ? ` · absent des totaux : ${safeText(manquantes.join(', '))}` : ''}</div>` : '';
+      const notes = [
+        'Tarifs officiels : MAI 0,10 $/h (offre de lancement, fin annoncée au 31/12/2026) · Groq 0,04 $/h, 10 s minimum facturées par requête · Gemini 3.5 Transcribe ≈ 0,30 $/h (aux jetons) · MAI via OpenRouter = coût renvoyé par OpenRouter.',
+        `Montant souligné en pointillé = inclut une part reconstituée depuis les anciens compteurs${debutComplet ? ` (comptage complet depuis le ${coutFr(debutComplet)} ; avant, seul MAI était compté pour le sous-titrage, Jarvis et SubWhisper Pro, et l'historique DictoKey ne connaît pas le minimum Groq de 10 s)` : ''}.`,
+        "Non compté : AssemblyAI (appelé directement avec sa propre clé), la traduction et les résumés IA. Jours = jours de Paris. La facture du fournisseur reste la référence.",
+      ];
+      return `<div id="cout-bloc" class="stt-banner cout-bloc"><div class="stt-head"><span class="stt-title">Coût des transcriptions</span><span class="cout-lu">lu en direct à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span></div>`
+        + err + tuiles + table + `<div class="stt-foot">${notes.map(n => safeText(n)).join('<br>')}</div></div>`;
+    }
+
     function stPlaceholder(id = 'st') {
       const src = ST_SOURCES[id];
       setTimeout(() => stLoad(id), 0);
@@ -2399,12 +2577,7 @@
       if (s.par_defaut) meta.push('par défaut (aucun choix fait au dashboard)');
       else if (s.changed && s.changed.at) meta.push(`basculé le ${sttHeure(s.changed.at)} (${lib(s.changed.from)} → ${lib(s.changed.to)}${s.changed.source ? ', depuis ' + s.changed.source : ''})`);
       meta.push(`pannes MAI : ${pannes} aujourd'hui · ${s.errors_yesterday || 0} hier`);
-      // v2.39.0 (P5.3) : coût MAI réel, compté par la passerelle depuis les secondes facturées par Azure
-      if (typeof s.mai_secondes_mois === 'number') {
-        const duree = sec => sec >= 3600 ? `${Math.floor(sec / 3600)} h ${String(Math.round(sec % 3600 / 60)).padStart(2, '0')}` : `${Math.round(sec / 60)} min`;
-        const cout = sec => (sec / 3600 * (s.mai_prix_heure || 0)).toFixed(2).replace('.', ',') + ' $';
-        meta.push(`MAI ce mois : ${duree(s.mai_secondes_mois)} ≈ ${cout(s.mai_secondes_mois)} (aujourd'hui ${duree(s.mai_secondes_jour || 0)})`);
-      }
+      // v2.44.0 : le coût (tous moteurs) est dans « Coût des transcriptions », en tête de l'onglet
       const err = s.last_error ? `<span class="stt-meta${pannes > 0 ? ' stt-err' : ''}">dernière erreur ${sttHeure(s.last_error.ts)} — ${safeText(String(s.last_error.status))} ${safeText(s.last_error.message || '')}</span>` : '';
       const lignes = (s.moteurs || []).map(m => {
         const i = (src.infos || ST_INFOS)[m.id] || {}, actif = m.id === s.engine;
@@ -3234,7 +3407,7 @@
       else if (app.key === 'dkpc') content = renderDkpcView(data);
       else if (app.key === 'factory') content = renderFactoryView(data);
       else if (app.key === 'studio') content = renderStudioView(data);
-      else if (app.key === 'st') content = sttPlaceholder() + stPlaceholder('st') + stPlaceholder('swp') + stPlaceholder('jv');
+      else if (app.key === 'st') content = coutPlaceholder() + sttPlaceholder() + stPlaceholder('st') + stPlaceholder('swp') + stPlaceholder('jv');   // v2.44.0 : coûts en tête
       else content = renderPlaceholder(app, data);
       // UN SEUL bouton « Actualiser », partout (demande Quang 16/07) : la fresh-bar juste en dessous EST
       // un bouton cliquable en entier, et elle porte le contexte (statut + date + âge). Le bouton du header
