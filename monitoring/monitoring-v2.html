@@ -360,7 +360,7 @@
     .sw { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border-radius: 3px; vertical-align: middle; }
     .sw.s1, .split-bar i.s1 { background: #3987e5; }
     .sw.s2, .split-bar i.s2 { background: var(--ink-faint); }
-    .sw.s3 { background: #c98500; }
+    .sw.s3, .split-bar i.s3 { background: #c98500; }
     .split-bar { display: flex; height: 13px; margin-top: 10px; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: rgba(255, 255, 255, .05); }
     .split-bar i { display: block; height: 100%; }
     .step { margin-top: 7px; }
@@ -645,7 +645,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.44.0-cout-transcriptions';
+    const VERSION = 'v2.45.0-bulle-ou-clavier';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1343,7 +1343,7 @@
       const headers = { Authorization: `Bearer ${getToken(cfg)}` };
       const j = async url => { const r = await fetch(url, { signal, headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); };
       const pub = (url, fallback) => fetch(url, { signal }).then(r => r.json()).catch(() => fallback);
-      const [mon, stats, dev, visit, click, play, fb] = await Promise.all([
+      const [mon, stats, dev, visit, click, play, fb, src] = await Promise.all([
         j(`${DK_GATEWAY}/admin/monitoring?period=${DK_PERIOD}&advanced=1`),
         j(`${DK_GATEWAY}/admin/stats`),
         j(`${DK_GATEWAY}/admin/devices`),
@@ -1353,9 +1353,10 @@
         // lance en fire-and-forget depuis render() → la race condition du prod (window._kpiDevicesCtx + re-render
         // via updateKpiDevices) disparaît. Chiffres finaux identiques, un seul rendu.
         j(`${DK_GATEWAY}/admin/playstore-stats`).catch(() => null),
-        j(`${DK_GATEWAY}/admin/firebase-stats?period=7d`).catch(() => null)   // toléré (cache KV 1h, données J-1)
+        j(`${DK_GATEWAY}/admin/firebase-stats?period=7d`).catch(() => null),   // toléré (cache KV 1h, données J-1)
+        j(`${DK_GATEWAY}/admin/source-split`).catch(() => null)   // v2.45.0 : bulle / clavier / les deux (gateway v1.8.0)
       ]);
-      return { mon, stats, dev, visit, click, play, fb };
+      return { mon, stats, dev, visit, click, play, fb, src };
     }
 
     function dkPctChange(today, yesterday) {
@@ -1579,6 +1580,31 @@
       }
       return kpis + `<div class="fb-grid"><div><div class="chart-title dk-sub2">🎯 Funnel d’activation 7j</div>${funnel}</div>`
         + `<div><div class="chart-title dk-sub2">🌍 Sources d’acquisition 7j</div><div class="fb-sources">${sources}</div></div></div>`;
+    }
+
+    // v2.45.0 — « Bulle ou clavier ? » (question de Quang, 08/10/2026). Source : GET /admin/source-split
+    // (gateway DictoKey v1.8.0), alimenté par l'en-tête X-Source envoyé par l'app à partir de la v2.71.0.
+    // ⚠ Avant la v2.71.0, aucune app n'envoyait l'origine : un zéro ici veut dire « pas encore mesuré »,
+    // jamais « personne n'utilise la bulle ».
+    function renderDkSourceSplit(src) {
+      if (!src || !src.j7) return `<div class="no-data">⏳ Route /admin/source-split indisponible</div>`;
+      const bloc = (p, titre) => {
+        const u = p.utilisateurs, d = p.dictees;
+        const tot = u.bulle_seule + u.clavier_seul + u.les_deux + u.autres;
+        if (!tot) return `<div><div class="chart-title">${titre}</div><div class="no-data">⏳ Pas encore de donnée — l’origine n’est envoyée qu’à partir de l’app v2.71.0</div></div>`;
+        const pc = (x) => dkPct(x, tot);
+        return `<div><div class="chart-title">${titre}</div>`
+          + `<div class="big">${dkNum(tot)} <span>utilisateurs ayant dicté</span></div>`
+          + `<div class="lg-row"><i class="sw s1"></i>🫧 Bulle seule : <b>${u.bulle_seule}</b> (${pc(u.bulle_seule)}%)</div>`
+          + `<div class="lg-row"><i class="sw s2"></i>⌨ Clavier seul : <b>${u.clavier_seul}</b> (${pc(u.clavier_seul)}%)</div>`
+          + `<div class="lg-row"><i class="sw s3"></i>🔀 Les deux : <b>${u.les_deux}</b> (${pc(u.les_deux)}%)</div>`
+          + (u.autres ? `<div class="lg-row"><i class="sw s4"></i>Autres (interprète, notification) : <b>${u.autres}</b></div>` : '')
+          + `<div class="split-bar"><i class="s1" style="width:${pc(u.bulle_seule)}%"></i><i class="s2" style="width:${pc(u.clavier_seul)}%"></i><i class="s3" style="width:${pc(u.les_deux)}%"></i></div>`
+          + `<div class="lg-row" style="opacity:.75">Dictées : 🫧 ${dkNum(d.bubble)} · ⌨ ${dkNum(d.ime)}`
+          + (d.interpreter ? ` · interprète ${dkNum(d.interpreter)}` : '') + (d.notification ? ` · notification ${dkNum(d.notification)}` : '') + `</div></div>`;
+      };
+      return `<div class="donut-grid">${bloc(src.j7, '7 derniers jours')}${bloc(src.j30, '30 derniers jours')}</div>`
+        + `<div class="lg-row" style="opacity:.6;font-size:12px">${src.note || ''}</div>`;
     }
 
     function renderDkAdoption(fb) {
@@ -2614,7 +2640,7 @@
 
     function renderDkView(payload) {
       if (!payload || !payload.mon) return EmptyState('DictoKey', 'Aucune donnée reçue du gateway.');
-      const { mon, stats, dev, visit, click, play, fb } = payload;
+      const { mon, stats, dev, visit, click, play, fb, src } = payload;
       const ds = dkDeviceStats(dev);
       // Devices triés par lastSeen desc (comme la prod). Les filtres/la page sont conservés entre les rendus.
       dkDevState.all = ds.devicesList.slice().sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
@@ -2759,6 +2785,7 @@
         + `<section class="section">${Panel('dk-site', '🌐 Funnel site → Play Store', siteFunnel, true)}</section>`
         + `<section class="section">${Panel('dk-play', '📥 Play Store — adoption & activité', psHtml, true)}</section>`
         + `<section class="section">${Panel('dk-activity', '📈 Activité', activity, true)}</section>`
+        + `<section class="section">${Panel('dk-source', '🫧⌨ Bulle ou clavier ?', renderDkSourceSplit(src), true)}</section>`
         + `<section class="section">${Panel('dk-perf', '⚡ Performance API', perf, false)}</section>`
         + `<section class="section">${Panel('dk-split', '🌍 Répartition', donuts, false)}</section>`
         + `<section class="section">${Panel('dk-fb', '📊 Activation & engagement (Firebase J-1)', renderDkFirebase(fb), false)}</section>`
