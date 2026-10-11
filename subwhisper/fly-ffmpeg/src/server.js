@@ -45,7 +45,7 @@ const os = require('os');
 // Source UNIQUE de la version : la banniere de demarrage et /health la lisent
 // toutes les deux ici. Le 07/09 elles avaient diverge (1.30.0 vs 1.32.0), ce qui
 // rend le log de demarrage menteur — donc inutilisable pour verifier un deploiement.
-const SERVER_VERSION = '1.38.0';   // 1.38.0 (03/10/2026) : moteur MAI-Transcribe-2 (mai2, mai2-openrouter)
+const SERVER_VERSION = '1.39.0';   // 1.39.0 (11/10/2026) : MAI recoupe une tranche sur le bug de decodage Azure. 1.38.0 (03/10/2026) : moteur MAI-Transcribe-2 (mai2, mai2-openrouter)
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
@@ -1085,6 +1085,40 @@ function motsVersSegments(mots, offsetSec, chunkDurationSec) {
   }).filter(seg => seg.text.length > 0);
 }
 
+// v1.39.0 (11/10/2026, meme correctif que Telegramme Video v0.117.0) : Azure rend 500 « 'utf-8' codec can't
+// decode byte 0x87 » sur CERTAINS audios chinois (bug serveur Microsoft, deterministe pour un audio donne : 10 rejeux,
+// meme erreur). La meme tranche coupee en deux passe. Sur CE motif seulement : recoupe (3 niveaux max, pas sous 20 s)
+// et recolle les mots, 2e moitie decalee. Toute autre erreur remonte inchangee (decision D2 intacte).
+const MAI_DECOUPE_MIN_S = 20, MAI_DECOUPE_PROFONDEUR = 3;
+async function maiMotsAzure(pcm, def, gatewayKey, gatewayUrl, jobId, chunkIdx, profondeur = 0) {
+  const fd = new FormData();
+  fd.append('audio', new Blob([buildWavBuffer(pcm)], { type: 'audio/wav' }), `chunk_${chunkIdx}.wav`);
+  fd.append('definition', JSON.stringify(def));
+  const r = await fetch(`${gatewayUrl}/api/mai`, { method: 'POST',
+    headers: { 'Authorization': `Bearer ${gatewayKey}`, 'X-Stt-App': 'soustitrage' }, body: fd });
+  if (!r.ok) {
+    const corps = (await r.text()).slice(0, 200);
+    const duree = pcm.length / 32000;
+    if (r.status === 500 && corps.includes("codec can't decode") && profondeur < MAI_DECOUPE_PROFONDEUR &&
+        duree >= MAI_DECOUPE_MIN_S) {
+      const moitie = Math.floor(pcm.length / 4) * 2;          // frontiere sur un echantillon entier
+      const decalage = moitie / 32000;
+      console.warn(`[${jobId}] Chunk ${chunkIdx}: bug de decodage Azure sur ${duree.toFixed(0)} s -> recoupe en 2 x ${decalage.toFixed(0)} s`);
+      const a = await maiMotsAzure(pcm.subarray(0, moitie), def, gatewayKey, gatewayUrl, jobId, chunkIdx, profondeur + 1);
+      const b = await maiMotsAzure(pcm.subarray(moitie), def, gatewayKey, gatewayUrl, jobId, chunkIdx, profondeur + 1);
+      return a.concat(b.map(w => ({ ...w, start: w.start + decalage, end: w.end + decalage })));
+    }
+    throw new Error(`MAI HTTP ${r.status}: ${corps}`);
+  }
+  const j = await r.json();
+  const mots = [];
+  for (const p of j.phrases || []) for (const w of p.words || []) {
+    const s0 = (w.offsetMilliseconds || 0) / 1000;
+    mots.push({ start: s0, end: s0 + (w.durationMilliseconds || 0) / 1000, text: w.text || '' });
+  }
+  return mots;
+}
+
 async function transcribeWithMai({ jobId, wavBuffer, chunkIdx, srcLang, sttEngine, gatewayKey, gatewayUrl,
                                    offsetSec, chunkDurationSec }) {
   const viaOR = (sttEngine || '').toLowerCase() === 'mai2-openrouter';
@@ -1099,17 +1133,8 @@ async function transcribeWithMai({ jobId, wavBuffer, chunkIdx, srcLang, sttEngin
         const def = { enhancedMode: { enabled: true, model: 'MAI-Transcribe-2',
                                       modelOptions: { timestamps: 'word', transcribeStyle: 'verbatim' } } };
         if (langue) def.locales = [langue];
-        const fd = new FormData();
-        fd.append('audio', new Blob([wavBuffer], { type: 'audio/wav' }), `chunk_${chunkIdx}.wav`);
-        fd.append('definition', JSON.stringify(def));
-        const r = await fetch(`${gatewayUrl}/api/mai`, { method: 'POST',
-          headers: { 'Authorization': `Bearer ${gatewayKey}`, 'X-Stt-App': 'soustitrage' }, body: fd });
-        if (!r.ok) throw new Error(`MAI HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
-        const j = await r.json();
-        for (const p of j.phrases || []) for (const w of p.words || []) {
-          const s0 = (w.offsetMilliseconds || 0) / 1000;
-          mots.push({ start: s0, end: s0 + (w.durationMilliseconds || 0) / 1000, text: w.text || '' });
-        }
+        // wavBuffer = buildWavBuffer(pcm) : en-tete canonique de 44 octets, PCM 16 kHz mono 16 bits derriere.
+        mots = await maiMotsAzure(Buffer.from(wavBuffer).subarray(44), def, gatewayKey, gatewayUrl, jobId, chunkIdx);
       } else {
         const body = { model: 'microsoft/mai-transcribe-2',
                        input_audio: { data: Buffer.from(wavBuffer).toString('base64'), format: 'wav' },

@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.66</title>
+<title>SubWhisper v9.67</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1143,7 +1143,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.66</span>
+    <span class="ver-badge">v9.67</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1488,7 +1488,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.66 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.67 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -2944,6 +2944,8 @@ async function _fetchMaiReessai(url, opts, chunkNum, totalChunks) {
     var resp = null, err = null;
     try { resp = await fetch(url, opts); } catch (e) { if (e && e.name === 'AbortError') throw e; err = e; }
     var panne = !!err || resp.status >= 500 || resp.status === 429;
+    // v9.67 : le bug de decodage d'Azure est deterministe -> pas de reessai, l'appelant recoupe la tranche.
+    if (panne && resp && resp.status === 500 && _maiBugDecodage(await resp.clone().text().catch(function() { return ''; }))) return resp;
     if (!panne || essai >= 3) { if (err) throw err; return resp; }
     appendLog('🔁 MAI ' + chunkNum + '/' + totalChunks + ' : essai ' + essai + '/3 en echec (' +
       (err ? (err.message || err) : 'HTTP ' + resp.status) + '), nouvel essai dans ' + (5 * essai) + ' s');
@@ -2957,6 +2959,59 @@ async function _fetchMaiReessai(url, opts, chunkNum, totalChunks) {
   }
 }
 
+// v9.67 (11/10/2026, meme correctif que Telegramme Video v0.117.0 et Fly 1.39.0) : Azure rend 500 « 'utf-8' codec
+// can't decode byte 0x87 » sur CERTAINS audios chinois (bug serveur Microsoft, deterministe : 10 rejeux, meme erreur).
+// La meme tranche coupee en deux passe. Sur CE motif seulement : recoupe (3 niveaux max, pas sous 20 s), mots
+// recolles avec la 2e moitie decalee. Toute autre erreur remonte inchangee (decision D2 intacte).
+var MAI_DECOUPE_MIN_S = 20, MAI_DECOUPE_PROFONDEUR = 3;
+function _maiBugDecodage(corps) { return String(corps || '').indexOf("codec can't decode") >= 0; }
+
+// Coupe un fichier audio en deux WAV 16 kHz mono ; rend aussi la duree de la 1re moitie (decalage de la 2e).
+async function _maiMoities(f) {
+  var ctx = new (window.AudioContext || window.webkitAudioContext)();
+  var dec;
+  try { dec = await ctx.decodeAudioData(await f.arrayBuffer()); } finally { try { ctx.close(); } catch (e) {} }
+  var off = new OfflineAudioContext(1, Math.ceil(dec.duration * 16000), 16000);
+  var src = off.createBufferSource();
+  src.buffer = dec; src.connect(off.destination); src.start(0);
+  var ech = (await off.startRendering()).getChannelData(0);
+  var m = Math.floor(ech.length / 2);
+  var w = function(s) { return new File([new Blob([encodeWavFromSamples(s, 16000)], { type: 'audio/wav' })], 'mai.wav', { type: 'audio/wav' }); };
+  return { a: w(ech.subarray(0, m)), b: w(ech.subarray(m)), decalage: m / 16000, duree: ech.length / 16000 };
+}
+
+async function _maiMotsAzure(f, def, gwKey, chunkNum, totalChunks, mots, volume, decalage, profondeur) {
+  var fd = new FormData();
+  fd.append('audio', f, f.name || 'audio.wav');
+  fd.append('definition', JSON.stringify(def));
+  var resp = await _fetchMaiReessai(GATEWAY_URL + '/api/mai', {
+    method: 'POST', headers: { 'Authorization': 'Bearer ' + gwKey },
+    body: fd, signal: _abortCtrl ? _abortCtrl.signal : undefined
+  }, chunkNum, totalChunks);
+  if (!resp.ok) {
+    var t = await resp.text().catch(function() { return ''; });
+    if (resp.status === 500 && _maiBugDecodage(t) && profondeur < MAI_DECOUPE_PROFONDEUR) {
+      var mo = await _maiMoities(f);
+      if (mo.duree >= MAI_DECOUPE_MIN_S) {
+        appendLog('✂️ MAI ' + chunkNum + '/' + totalChunks + ' : bug de decodage Azure sur ' + Math.round(mo.duree) +
+                  ' s, recoupe en 2 x ' + Math.round(mo.decalage) + ' s');
+        await _maiMotsAzure(mo.a, def, gwKey, chunkNum, totalChunks, mots, volume, decalage, profondeur + 1);
+        await _maiMotsAzure(mo.b, def, gwKey, chunkNum, totalChunks, mots, volume, decalage + mo.decalage, profondeur + 1);
+        return;
+      }
+    }
+    throw new Error('MAI chunk ' + chunkNum + '/' + totalChunks + ' : HTTP ' + resp.status + ' ' + t.slice(0, 160));
+  }
+  var data = await resp.json();
+  (data.phrases || []).forEach(function(p) {
+    volume[p.locale || '?'] = (volume[p.locale || '?'] || 0) + (p.text || '').length;
+    (p.words || []).forEach(function(w) {
+      var s0 = (w.offsetMilliseconds || 0) / 1000 + decalage;
+      mots.push({ start: s0, end: s0 + (w.durationMilliseconds || 0) / 1000, text: w.text || '' });
+    });
+  });
+}
+
 async function transcribeChunkMai(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec, viaOpenRouter) {
   var f = await _fichierPourMai(file);
   var _gwKey = getGatewayKey();
@@ -2965,25 +3020,7 @@ async function transcribeChunkMai(file, srcLang, key, chunkNum, totalChunks, off
     var def = { enhancedMode: { enabled: true, model: 'MAI-Transcribe-2',
                                 modelOptions: { timestamps: 'word', transcribeStyle: 'verbatim' } } };
     if (srcLang) def.locales = [srcLang];
-    var fd = new FormData();
-    fd.append('audio', f, f.name || 'audio.wav');
-    fd.append('definition', JSON.stringify(def));
-    resp = await _fetchMaiReessai(GATEWAY_URL + '/api/mai', {
-      method: 'POST', headers: { 'Authorization': 'Bearer ' + _gwKey },
-      body: fd, signal: _abortCtrl ? _abortCtrl.signal : undefined
-    }, chunkNum, totalChunks);
-    if (!resp.ok) {
-      var t = await resp.text().catch(function() { return ''; });
-      throw new Error('MAI chunk ' + chunkNum + '/' + totalChunks + ' : HTTP ' + resp.status + ' ' + t.slice(0, 160));
-    }
-    var data = await resp.json();
-    (data.phrases || []).forEach(function(p) {
-      volume[p.locale || '?'] = (volume[p.locale || '?'] || 0) + (p.text || '').length;
-      (p.words || []).forEach(function(w) {
-        var s0 = (w.offsetMilliseconds || 0) / 1000;
-        mots.push({ start: s0, end: s0 + (w.durationMilliseconds || 0) / 1000, text: w.text || '' });
-      });
-    });
+    await _maiMotsAzure(f, def, _gwKey, chunkNum, totalChunks, mots, volume, 0, 0);
   } else {
     // Secours manuel (dashboard) : meme modele via OpenRouter. Mesure : 12/20 au 1er essai, 2-3x plus lent.
     var b64 = await new Promise(function(res, rej) {
@@ -4771,7 +4808,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.66',
+    version: 'v9.67',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
