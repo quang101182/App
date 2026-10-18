@@ -1,4 +1,4 @@
-var CACHE = 'fitness-tracker-v2.4';
+var CACHE = 'fitness-tracker-v3.0';
 var FILES = ['./', './index.html'];
 
 self.addEventListener('install', function(e) {
@@ -23,6 +23,15 @@ self.addEventListener('activate', function(e) {
     })
   );
   self.clients.claim();
+});
+
+// Notification « repos terminé » : un tap ramène l'app au premier plan
+self.addEventListener('notificationclick', function(e) {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list) {
+    for (var i = 0; i < list.length; i++) { if ('focus' in list[i]) return list[i].focus(); }
+    return self.clients.openWindow('./index.html');
+  }));
 });
 
 self.addEventListener('fetch', function(e) {
