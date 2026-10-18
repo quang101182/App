@@ -1,4 +1,4 @@
-var CACHE = 'fitness-tracker-v3.0';
+var CACHE = 'fitness-tracker-v3.1';
 var FILES = ['./', './index.html'];
 
 self.addEventListener('install', function(e) {

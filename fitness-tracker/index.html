@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- deploy test 2026-02-22 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Fitness Tracker v3.0</title>
+    <title>Fitness Tracker v3.1</title>
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -399,6 +399,10 @@
         .card.done { opacity: .78; }
         .card.done .num { background: var(--glow-green); }
         .card.done .badge { color: var(--glow-green); }
+        .card.skipped { opacity: .5; }
+        .card.skipped .c-name { text-decoration: line-through; text-decoration-thickness: 1px; }
+        .card.skipped .num { background: var(--text-secondary); }
+        .skip-undo { min-height: 36px; padding: 0 10px; color: var(--text-main); }
         .c-head { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 6px 4px 6px 10px; cursor: pointer; }
         .num { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; color: #fff; background: linear-gradient(135deg, var(--glow-violet), var(--glow-teal)); }
         .c-title { flex: 1; min-width: 0; }
@@ -533,7 +537,7 @@
         </header>
 
         <div id="app-menu" class="hidden" role="menu">
-            <div class="st"><i id="menu-dirty" class="d hidden"></i><span id="active-backup-name">Aucun fichier</span><span id="drive-api-dot" class="api" title="API Drive"></span><span>v3.0</span></div>
+            <div class="st"><i id="menu-dirty" class="d hidden"></i><span id="active-backup-name">Aucun fichier</span><span id="drive-api-dot" class="api" title="API Drive"></span><span>v3.1</span></div>
             <button data-action="header-backup"><i class="fa-solid fa-download pointer-events-none" style="color:var(--glow-green)"></i>Sauvegarder (local)</button>
             <button data-action="header-drive-save"><i class="fa-brands fa-google-drive pointer-events-none" style="color:#4285F4"></i>Sauvegarder sur Drive</button>
             <hr>
@@ -607,8 +611,10 @@
         // =============================================
         // GOOGLE DRIVE via MCP Gateway
         // =============================================
-        const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
-        let driveConfig = { folderId: '' };
+        // v3.1 : le serveur Drive exige une clé pour l'accès général. Cette page publique n'en a pas et n'utilise
+        // que les routes RESTREINTES /api/app/fitness/* (dossier des backups et noms de fichiers imposés côté serveur).
+        const DRIVE_BASE = 'https://mcp-drive-server-q3dg.onrender.com';
+        let driveConfig = { folderId: '' };   // conservé pour compatibilité (le dossier est désormais fixé par le serveur)
 
         function loadDriveConfig() {
             const saved = localStorage.getItem('fitnessDriveConfig');
@@ -624,22 +630,21 @@
             localStorage.setItem('fitnessDriveConfig', JSON.stringify(driveConfig));
         }
 
-        async function mcpDrive(tool, args) {
+        async function fitnessDrive(action, args = {}) {
             const ctrl = new AbortController();
-            const timeout = setTimeout(() => ctrl.abort(), 20000);
+            const timeout = setTimeout(() => ctrl.abort(), 30000);
             try {
-                const res = await fetch(MCP_DRIVE_URL, {
+                const res = await fetch(`${DRIVE_BASE}/api/app/fitness/${action}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tool, arguments: args }),
+                    body: JSON.stringify(args),
                     signal: ctrl.signal
                 });
-                if (!res.ok) throw new Error(`MCP Drive HTTP ${res.status}`);
-                const data = await res.json();
-                if (data.error) throw new Error(data.error);
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.error) throw new Error(data.error || `Drive HTTP ${res.status}`);
                 return data.result;
             } catch(e) {
-                if (e.name === 'AbortError') throw new Error('Timeout Drive (20s) — Render en cold start ?');
+                if (e.name === 'AbortError') throw new Error('Timeout Drive (30 s) — serveur en démarrage, réessaie.');
                 throw e;
             } finally { clearTimeout(timeout); }
         }
@@ -655,43 +660,21 @@
             const dot = document.getElementById('drive-api-dot');
             if (!dot) return;
             try {
-                const r = await fetch(MCP_DRIVE_URL.replace('/api/tool', '/health'), { method: 'GET', signal: AbortSignal.timeout(5000) });
+                // /health se réveille lentement après une veille Render : on laisse 25 s
+                const r = await fetch(`${DRIVE_BASE}/health`, { method: 'GET', signal: AbortSignal.timeout(25000) });
                 dot.style.background = r.ok ? '#22c55e' : '#ef4444';
                 dot.title = r.ok ? 'API Drive ✓' : 'API Drive ✗';
             } catch(_) {
-                // fallback: ping /api/tool with a harmless search
-                try {
-                    const r = await fetch(MCP_DRIVE_URL, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ tool: 'search_files', arguments: { query: '__ping__', max_results: 1 } }),
-                        signal: AbortSignal.timeout(8000)
-                    });
-                    dot.style.background = r.ok ? '#22c55e' : '#ef4444';
-                    dot.title = r.ok ? 'API Drive ✓' : 'API Drive ✗';
-                } catch(_) {
-                    dot.style.background = '#ef4444';
-                    dot.title = 'API Drive ✗';
-                }
+                dot.style.background = '#ef4444';
+                dot.title = 'API Drive ✗';
             }
         }
 
         async function driveUpsertFile(filename, content) {
-            const searchArgs = { query: filename, max_results: 1, format: 'json' };
-            if (driveConfig.folderId) searchArgs.folder_id = driveConfig.folderId;
-            const raw = await mcpDrive('search_files', searchArgs);
-            const files = typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []);
-            const existing = files.find(f => f.name === filename);
-            if (existing) {
-                await mcpDrive('write_file', { file_id: existing.id, content });
-            } else {
-                const createArgs = { name: filename, content };
-                if (driveConfig.folderId) createArgs.folder_id = driveConfig.folderId;
-                await mcpDrive('create_file', createArgs);
-            }
+            await fitnessDrive('save', { name: filename, content });
         }
 
         const handleDriveSave = async () => {
-            if (!driveConfig.folderId) { showToast('Folder ID Drive manquant ! Ouvrez les réglages.', true); return; }
             setDriveBtnsLoading(true);
             showToast('☁️ Envoi vers Drive...');
             cleanupEmptyPerformances();
@@ -720,16 +703,12 @@
             confirm("Des modifications ne sont pas sauvegardées (séance du jour comprise).\nCharger ce fichier les remplacera définitivement.\n\nContinuer ?");
 
         const handleDriveLoad = async () => {
-            if (!driveConfig.folderId) { showToast('Folder ID Drive manquant ! Ouvrez les réglages.', true); return; }
             if (!confirmOverwrite()) return;
             setDriveBtnsLoading(true);
             showToast('☁️ Récupération des fichiers...');
             try {
-                const searchArgs = { query: 'backup_fitness', max_results: 50, format: 'json' };
-                if (driveConfig.folderId) searchArgs.folder_id = driveConfig.folderId;
-                const raw = await mcpDrive('search_files', searchArgs);
-                const files = typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []);
-                renderDriveLoadModal(files);
+                const files = await fitnessDrive('list');
+                renderDriveLoadModal(Array.isArray(files) ? files : []);
             } catch(e) {
                 console.error('Erreur Drive list:', e);
                 showToast('Erreur lecture Drive: ' + e.message, true);
@@ -742,11 +721,11 @@
                 filesHTML = `<p class="text-secondary text-center py-6">Aucun fichier JSON trouvé dans ce dossier.</p>`;
             } else {
                 filesHTML = files.map(f => {
-                    const date = new Date(f.modifiedTime).toLocaleString('fr-FR');
-                    return `<div class="drive-file-item" data-file-id="${f.id}" data-file-name="${f.name}">
+                    const date = f.modified ? new Date(f.modified).toLocaleString('fr-FR') : '';
+                    return `<div class="drive-file-item" data-file-name="${esc(f.name)}">
                         <i class="fa-solid fa-file-code"></i>
                         <div class="flex-grow min-w-0">
-                            <p class="font-semibold truncate">${f.name}</p>
+                            <p class="font-semibold truncate">${esc(f.name)}</p>
                             <p class="text-xs text-secondary">${date}</p>
                         </div>
                         <i class="fa-solid fa-download text-secondary"></i>
@@ -774,12 +753,11 @@
             document.getElementById('drive-file-list')?.addEventListener('click', async (e) => {
                 const item = e.target.closest('.drive-file-item');
                 if (!item) return;
-                const fileId = item.dataset.fileId;
                 const fileName = item.dataset.fileName;
 
                 showToast(`Chargement de ${fileName}...`);
                 try {
-                    const content = await mcpDrive('read_file', { file_id: fileId });
+                    const content = await fitnessDrive('read', { name: fileName });
                     const importedState = JSON.parse(content);
                     if (importedState.programs && importedState.performance) {
                         state = normalizeState(importedState); padTodayEntries();
@@ -893,13 +871,45 @@
         const toStore = (n) => String(Math.round(n * 100) / 100);                     // stockage : point décimal, comme l'historique
         // Copie destinée aux fichiers de sauvegarde : uniquement les séries réellement faites, sans le marqueur interne
         // done → un fichier v3 reste lisible tel quel par les versions précédentes et par tout autre outil.
+        const FORMAT_NOTE = [
+            "Sauvegarde Fitness Tracker (suivi de musculation).",
+            "programs[programme].exercises = exercices prévus : Exercice (nom), Groupe (muscle), Séries, Répétitions visées, Repos (secondes), Notes d'exécution, Objectif.",
+            "performance[programme][exercice] = séances réalisées, triées par date : { date: AAAA-MM-JJ, sets: [ { poids, reps } ] }.",
+            "poids en kg (point décimal) ou \"PDC\" = poids du corps ; reps = répétitions faites. Seules les séries réellement exécutées figurent dans sets.",
+            "non_execute_volontairement: true = ce jour-là, l'exercice n'a volontairement PAS été fait (choix de la séance, ou remplacé par un autre exercice équivalent). Ce n'est ni un oubli ni une donnée manquante.",
+            "Un exercice sans séance à une date donnée n'a simplement pas été enregistré ce jour-là.",
+            "_resume = synthèse calculée à l'export : dernière séance de chaque programme, jours écoulés, exercices faits (poids×reps), volontairement non exécutés, non enregistrés."
+        ];
+        // Résumé lisible en tête de sauvegarde : où en est chaque programme (pour Claude ou un coach)
+        const buildResume = (st) => {
+            const today = getLocalToday();
+            const fmt = (s) => `${s.poids ?? '–'}×${s.reps ?? '–'}`;
+            const programmes = {};
+            (st.programOrder || Object.keys(st.programs || {})).forEach(prog => {
+                const perf = st.performance?.[prog] || {};
+                let last = '';
+                Object.values(perf).forEach(h => h.forEach(e => { if (e.date > last) last = e.date; }));
+                if (!last) { programmes[prog] = { derniere_seance: null }; return; }
+                const faits = {}, nonExecutes = [], nonEnregistres = [];
+                (st.programs[prog]?.exercises || []).forEach(ex => {
+                    const e = (perf[ex.Exercice] || []).find(x => x.date === last);
+                    if (e && e.non_execute_volontairement) nonExecutes.push(ex.Exercice);
+                    if (e && (e.sets || []).length) faits[ex.Exercice] = e.sets.map(fmt).join(' · ');
+                    else if (!e) nonEnregistres.push(ex.Exercice);
+                });
+                programmes[prog] = { derniere_seance: last, jours_depuis: Math.round((parseLocalDate(today) - parseLocalDate(last)) / 86400000),
+                    exercices_faits: faits, non_executes_volontairement: nonExecutes, non_enregistres: nonEnregistres };
+            });
+            return { genere_le: new Date().toLocaleString('fr-FR'), application: 'Fitness Tracker v3.1', programme_en_cours: st.currentProgram || null, programmes };
+        };
         const exportState = () => {
-            const out = JSON.parse(JSON.stringify({ ...state, isDirty: false }));
+            const out = JSON.parse(JSON.stringify({ _lisez_moi: FORMAT_NOTE, _resume: null, ...state, isDirty: false }));
             Object.values(out.performance || {}).forEach(prog => Object.keys(prog).forEach(name => {
                 prog[name] = prog[name].map(e => ({ ...e, sets: (e.sets || []).filter(s => !(s && s.done === false)).map(s => { const c = { ...s }; delete c.done; return c; }) }))
-                    .filter(e => e.sets.some(setHasValue));
+                    .filter(e => e.non_execute_volontairement === true || e.sets.some(setHasValue));
                 if (!prog[name].length) delete prog[name];
             }));
+            out._resume = buildResume(out);
             return out;
         };
         // Une série compte comme réalisée sauf si elle est explicitement marquée non faite (done === false).
@@ -943,7 +953,7 @@
             const prog = state.currentProgram;
             const exs = state.programs[prog]?.exercises || [];
             let total = 0, done = 0;
-            if (prog && sessionStarted(prog)) exs.forEach(ex => { const s = setsOf(prog, ex); total += s.length; done += s.filter(setIsDone).length; });
+            if (prog && sessionStarted(prog)) exs.forEach(ex => { if (isSkipped(prog, ex)) return; const s = setsOf(prog, ex); total += s.length; done += s.filter(setIsDone).length; });
             const pct = total ? Math.round(done / total * 100) : 0;
             fill.style.width = pct + '%';
             if (pct === 100 && _lastPct !== null && _lastPct < 100) launchConfetti();
@@ -961,7 +971,7 @@
                         if ((entry.sets || []).some(s => s && s.done === false)) {
                             entry.sets = entry.sets.filter(s => !(s && s.done === false));
                         }
-                        return (entry.sets || []).some(setHasValue);
+                        return entry.non_execute_volontairement === true || (entry.sets || []).some(setHasValue);
                     });
                     if (cleanedHistory.length === 0) {
                         delete state.performance[progName][exoName];
@@ -1029,6 +1039,7 @@
             st.activeFileName = st.activeFileName || null;
             st.isDirty = !!st.isDirty;
             st.theme = st.theme || 'dark';
+            delete st._lisez_moi; delete st._resume;   // aides de lecture des sauvegardes, régénérées à chaque export
             if (!st.currentProgram || !st.programs[st.currentProgram]) st.currentProgram = st.programOrder[0] || null;
             return st;
         };
@@ -1117,12 +1128,29 @@
         const padTodayEntries = () => {
             Object.entries(state.programs).forEach(([prog, p]) => (p.exercises || []).forEach(ex => {
                 const e = todayEntryOf(prog, ex.Exercice);
-                if (!e) return;
+                if (!e || e.non_execute_volontairement) return;
                 const want = plannedCount(ex, lastEntryOf(prog, ex.Exercice)), sugg = suggestSets(prog, ex);
                 while (e.sets.length < want) e.sets.push(sugg[e.sets.length] || { poids: '', reps: '', done: false });
             }));
         };
         const isComplete = (prog, ex) => { const e = todayEntryOf(prog, ex.Exercice); return !!e && e.sets.length > 0 && e.sets.every(setIsDone); };
+        // « Pas aujourd'hui » : exercice volontairement non exécuté ce jour-là (choix, ou alternative faite à la place).
+        // Enregistré dans la séance du jour → visible dans l'historique et explicite dans les sauvegardes.
+        const isSkipped = (prog, ex) => !!todayEntryOf(prog, ex.Exercice)?.non_execute_volontairement;
+        const isResolved = (prog, ex) => isComplete(prog, ex) || isSkipped(prog, ex);
+        const setSkipped = (prog, ex, on) => {
+            if (on) {
+                const entry = ensureToday(prog, ex);
+                entry.sets = entry.sets.filter(setIsDone);   // les séries proposées non faites n'ont pas de sens ici
+                entry.non_execute_volontairement = true;
+            } else {
+                const entry = todayEntryOf(prog, ex.Exercice);
+                if (!entry) return;
+                delete entry.non_execute_volontairement;
+                if (!entry.sets.some(setIsDone)) state.performance[prog][ex.Exercice] = historyOf(prog, ex.Exercice).filter(e => e !== entry);
+            }
+            markDirty();
+        };
         const sessionStarted = (prog) => ui.started[prog] === getLocalToday()
             || (state.programs[prog]?.exercises || []).some(ex => doneSets(todayEntryOf(prog, ex.Exercice)).length > 0);
         const progExercises = () => state.programs[state.currentProgram]?.exercises || [];
@@ -1134,14 +1162,14 @@
         const activeIndex = (prog) => {
             const exs = state.programs[prog]?.exercises || [];
             if (!exs.length || !sessionStarted(prog)) return -1;
-            const i = exs.findIndex(ex => ex.Exercice === ui.active[prog]);
+            const i = exs.findIndex(ex => ex.Exercice === ui.active[prog] && !isSkipped(prog, ex));
             if (i >= 0) return i;
-            const j = exs.findIndex(ex => !isComplete(prog, ex));
+            const j = exs.findIndex(ex => !isResolved(prog, ex));
             return j >= 0 ? j : 0;
         };
         const nextIncomplete = (prog, from) => {
             const exs = state.programs[prog]?.exercises || [];
-            for (let k = 1; k <= exs.length; k++) { const i = (from + k) % exs.length; if (!isComplete(prog, exs[i])) return i; }
+            for (let k = 1; k <= exs.length; k++) { const i = (from + k) % exs.length; if (!isResolved(prog, exs[i])) return i; }
             return -1;
         };
         const fmtVal = (v) => { const t = (v ?? '').toString().trim(); const n = parseNum(t); return /^\d+([.,]\d+)?$/.test(t) && Number.isFinite(n) ? fmtNum(n) : t; };
@@ -1187,13 +1215,15 @@
             const done = sets.filter(setIsDone).length;
             const complete = isComplete(prog, ex);
             const last = lastEntryOf(prog, ex.Exercice);
-            const summary = done ? fmtSetsLine(sets.filter(setIsDone)) : (last ? fmtSetsLine(doneSets(last)) : 'Première séance');
-            return `<div class="card${complete ? ' done' : ''}${isActive ? ' active' : ''}" data-index="${i}">
+            const skipped = isSkipped(prog, ex);
+            const summary = skipped ? 'Pas aujourd\'hui' : done ? fmtSetsLine(sets.filter(setIsDone)) : (last ? fmtSetsLine(doneSets(last)) : 'Première séance');
+            return `<div class="card${complete ? ' done' : ''}${skipped ? ' skipped' : ''}${isActive && !skipped ? ' active' : ''}" data-index="${i}">
                 <div class="c-head" data-action="activate">
                     <span class="num">${complete ? '<i class="fa-solid fa-check"></i>' : i + 1}</span>
                     <div class="c-title"><div class="c-name">${esc(ex.Exercice || 'Sans nom')}</div>
                         <div class="c-sub">${ex.Groupe ? `<b>${esc(ex.Groupe)}</b> · ` : ''}${summary}</div></div>
-                    <span class="badge">${complete ? '<i class="fa-solid fa-check"></i> ' : ''}${done}/${sets.length}</span>
+                    ${skipped ? '<button class="badge skip-undo" data-action="unskip" aria-label="Refaire cet exercice aujourd\'hui"><i class="fa-solid fa-rotate-left pointer-events-none"></i> passé</button>'
+                              : `<span class="badge">${complete ? '<i class="fa-solid fa-check"></i> ' : ''}${done}/${sets.length}</span>`}
                     <button class="kebab" data-action="card-menu" aria-label="Actions de l'exercice"><i class="fa-solid fa-ellipsis-vertical pointer-events-none"></i></button>
                 </div></div>`;
         };
@@ -1263,7 +1293,7 @@
             const act = activeIndex(programName);
             const wide = isWide();
             let html = repriseBannerHTML(programName);
-            exs.forEach((ex, i) => { html += (i === act && !wide) ? fullCardHTML(programName, ex, i) : collapsedCardHTML(programName, ex, i, i === act); });
+            exs.forEach((ex, i) => { html += (i === act && !wide && !isSkipped(programName, ex)) ? fullCardHTML(programName, ex, i) : collapsedCardHTML(programName, ex, i, i === act); });
             exerciseList.innerHTML = html;
             if (wide) detailPane.innerHTML = act >= 0 ? fullCardHTML(programName, exs[act], act)
                 : `<div class="detail-empty"><i class="fa-solid fa-dumbbell text-2xl mb-2"></i><p>Démarre la séance ou touche un exercice.</p></div>`;
@@ -1280,6 +1310,7 @@
         const activate = (i, { scroll = true } = {}) => {
             const prog = state.currentProgram, exs = progExercises();
             if (!exs[i]) return;
+            if (isSkipped(prog, exs[i])) setSkipped(prog, exs[i], false);
             ui.active[prog] = exs[i].Exercice; ui.started[prog] = getLocalToday(); saveUi();
             selSet = null; notesOpen = false;
             renderProgram();
@@ -1290,7 +1321,7 @@
         const nextAction = (prog) => {
             const exs = state.programs[prog].exercises;
             if (!sessionStarted(prog)) return { action: 'session-start', label: '<i class="fa-solid fa-play"></i>&nbsp; Démarrer la séance' };
-            if (exs.every(ex => isComplete(prog, ex))) {
+            if (exs.every(ex => isResolved(prog, ex))) {
                 const saved = ui.saved[prog] === getLocalToday() && !state.isDirty;
                 return { action: 'header-drive-save', alt: true, short: saved ? '✓ Sauvegardée' : 'Sauvegarder',
                     label: saved ? '<i class="fa-solid fa-circle-check"></i>&nbsp; Séance terminée · sauvegardée' : '<i class="fa-brands fa-google-drive"></i>&nbsp; Séance terminée · Sauvegarder' };
@@ -1370,7 +1401,7 @@
         const updateWakeLock = async () => {
             const prog = state.currentProgram;
             const exs = progExercises();
-            const want = document.visibilityState === 'visible' && !!prog && exs.length > 0 && sessionStarted(prog) && !exs.every(ex => isComplete(prog, ex));
+            const want = document.visibilityState === 'visible' && !!prog && exs.length > 0 && sessionStarted(prog) && !exs.every(ex => isResolved(prog, ex));
             try {
                 if (want && !wakeLock && 'wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
@@ -1397,7 +1428,7 @@
             markDirty();
             if (wasDone) { renderProgram(); return; } // simple correction : pas de nouveau repos
             const exDone = isComplete(prog, ex);
-            const allDone = exs.every(e => isComplete(prog, e));
+            const allDone = exs.every(e => isResolved(prog, e));
             if (!allDone) {
                 let label;
                 if (exDone) { const n = nextIncomplete(prog, a); label = n >= 0 ? `Repos · ensuite ${exs[n].Exercice}` : 'Repos'; }
@@ -1415,7 +1446,6 @@
             }
         };
         const onSessionComplete = (prog) => {
-            if (!driveConfig.folderId) return;
             // Sauvegarde Drive automatique en fin de séance (plus besoin d'y penser)
             handleDriveSave().then(() => {
                 if (!state.isDirty) { ui.saved[prog] = getLocalToday(); saveUi(); }
@@ -1541,7 +1571,19 @@
             const prog = state.currentProgram, exs = progExercises(), ex = exs[i];
             if (!ex) return;
             const entry = todayEntryOf(prog, ex.Exercice);
+            const skipped = isSkipped(prog, ex);
             const items = [
+                skipped
+                    ? { label: "Le faire finalement aujourd'hui", icon: 'fa-solid fa-rotate-left', run: () => { setSkipped(prog, ex, false); activate(i); } }
+                    : { label: "Pas aujourd'hui (non fait / remplacé)", icon: 'fa-solid fa-forward', run: () => {
+                        if (entry && entry.sets.some(setIsDone) && !confirm('Des séries sont déjà validées pour cet exercice aujourd\'hui. Le passer quand même ? (elles restent enregistrées)')) return;
+                        setSkipped(prog, ex, true);
+                        ui.started[prog] = getLocalToday();
+                        if (ui.active[prog] === ex.Exercice) { const n = nextIncomplete(prog, i); if (n >= 0) ui.active[prog] = exs[n].Exercice; else delete ui.active[prog]; }
+                        saveUi(); selSet = null; renderProgram(); requestAnimationFrame(scrollToActive);
+                        showToast(`« ${ex.Exercice} » passé pour aujourd'hui.`);
+                    } },
+                '-',
                 { label: 'Historique', icon: 'fa-solid fa-chart-line', run: () => { renderHistoryModal(ex.Exercice); historyModalContainer.style.display = 'flex'; setTimeout(() => historyModalContainer.classList.add('visible'), 10); } },
                 { label: "Modifier l'exercice", icon: 'fa-solid fa-pen', run: () => openExerciseEditor(i) },
                 { label: 'Ajouter une série', icon: 'fa-solid fa-plus', run: () => { const e = ensureToday(prog, ex); const l = e.sets[e.sets.length - 1] || {}; e.sets.push({ poids: l.poids || '', reps: l.reps || '', done: false }); ui.active[prog] = ex.Exercice; ui.started[prog] = getLocalToday(); saveUi(); markDirty(); renderProgram(); } },
@@ -1750,7 +1792,7 @@
                         </h3>
                         <div class="space-y-2">
                             <div>
-                                <label class="text-xs text-secondary">Folder ID (dossier Drive cible)</label>
+                                <label class="text-xs text-secondary">Dossier Drive : fixé côté serveur (sauvegardes fitness). Champ conservé pour mémoire.</label>
                                 <input type="text" id="drive-folder-id" value="${esc(cfg.folderId)}" placeholder="ID du dossier Drive" class="w-full mt-1 p-2 rounded-md input-bg text-sm focus:outline-none focus:border-cyan-500">
                             </div>
                             <button id="save-drive-config-btn" class="w-full p-2 rounded-md text-sm font-semibold mt-1" style="background: linear-gradient(45deg, #4285F4, #34A853); color: white; border: none;">
@@ -1781,7 +1823,7 @@
             else if (period === '1y') startDate.setFullYear(now.getFullYear() - 1);
             else startDate = new Date(0);
 
-            const filteredHistory = history.filter(e => parseLocalDate(e.date) >= startDate).map(e => ({ ...e, sets: doneSets(e) })).filter(e => e.sets.length);
+            const filteredHistory = history.filter(e => parseLocalDate(e.date) >= startDate).map(e => ({ ...e, sets: doneSets(e) })).filter(e => e.sets.length || e.non_execute_volontairement);
 
             let listHTML = '<p class="text-secondary">Aucun historique pour cette période.</p>';
             if (filteredHistory.length > 0) {
@@ -1798,7 +1840,7 @@
                         return `<div class="p-2 bg-secondary rounded-md flex justify-between items-center">
                             <div>
                                 <p class="font-semibold">${fmtDate(entry.date)}</p>
-                                <p class="text-sm text-secondary">${sets}</p>
+                                <p class="text-sm text-secondary">${sets || ''}${entry.non_execute_volontairement ? `${sets ? ' · ' : ''}<i class="fa-solid fa-forward"></i> Non exécuté volontairement` : ''}</p>
                             </div>
                             <button data-action="delete-perf-entry" data-date="${esc(entry.date)}" data-exercise-name="${esc(exerciseName)}" class="icon-btn text-sm" title="Supprimer cette entrée"><i class="fa-solid fa-trash-can"></i></button>
                         </div>`;
@@ -2311,7 +2353,7 @@
                 case 'session-start': {
                     askNotifyPermission();
                     const exs = progExercises();
-                    const first = exs.findIndex(ex => !isComplete(programName, ex));
+                    const first = exs.findIndex(ex => !isResolved(programName, ex));
                     ensureAudio();
                     activate(first >= 0 ? first : 0);
                     break;
@@ -2319,6 +2361,12 @@
                 case 'activate': {
                     const i = Number(target.closest('.card')?.dataset.index);
                     if (Number.isInteger(i)) activate(i);
+                    break;
+                }
+                case 'unskip': {
+                    const i = Number(target.closest('.card')?.dataset.index);
+                    const ex = progExercises()[i];
+                    if (ex) { setSkipped(programName, ex, false); activate(i); }
                     break;
                 }
                 case 'card-menu': {
