@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <!-- deploy test 2026-02-22 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fitness Tracker v2.3</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Fitness Tracker v2.4</title>
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#7c3aed">
@@ -378,7 +378,7 @@
                     <div id="app-title-container">
                         <h1 id="app-title" class="text-base font-bold leading-tight">Fitness Tracker</h1>
                         <span id="app-icon" class="text-base"><i class="fa-solid fa-dumbbell"></i></span>
-                        <span style="font-size:9px;color:var(--text-secondary);font-weight:400;margin-left:4px;opacity:0.7;">v2.3</span>
+                        <span style="font-size:9px;color:var(--text-secondary);font-weight:400;margin-left:4px;opacity:0.7;">v2.4</span>
                     </div>
                     <div class="flex items-center gap-0.5" style="position:relative; z-index:3;">
                         <button id="collapse-all-btn" class="p-1.5 rounded-full icon-btn" title="Tout replier" data-tooltip="Replier"><i class="fa-solid fa-compress fa-fw text-sm"></i></button>
@@ -469,8 +469,8 @@
         let chartInstances = {};
         let originalExerciseName = null;
         const isFileSystemAccessAPISupported = 'showDirectoryPicker' in window;
-        let touchStartX = 0;
-        let touchEndX = 0;
+        let touchStartX = 0, touchStartY = 0;
+        let touchEndX = 0, touchEndY = 0;
 
         // =============================================
         // GOOGLE DRIVE via MCP Gateway
@@ -566,7 +566,7 @@
             try {
                 const backupState = { ...state, isDirty: false };
                 const jsonContent = JSON.stringify(backupState, null, 2);
-                const dateString = new Date().toISOString().slice(0, 10);
+                const dateString = getLocalToday();
                 const dailyFilename = `backup_fitness_${dateString}.json`;
                 const lastFilename = 'fitness_last_backup.json';
 
@@ -584,8 +584,12 @@
             } finally { setDriveBtnsLoading(false); }
         };
 
+        const confirmOverwrite = () => !state.isDirty ||
+            confirm("Des modifications ne sont pas sauvegardées (séance du jour comprise).\nCharger ce fichier les remplacera définitivement.\n\nContinuer ?");
+
         const handleDriveLoad = async () => {
             if (!driveConfig.folderId) { showToast('Folder ID Drive manquant ! Ouvrez les réglages.', true); return; }
+            if (!confirmOverwrite()) return;
             setDriveBtnsLoading(true);
             showToast('☁️ Récupération des fichiers...');
             try {
@@ -646,7 +650,7 @@
                     const content = await mcpDrive('read_file', { file_id: fileId });
                     const importedState = JSON.parse(content);
                     if (importedState.programs && importedState.performance) {
-                        state = importedState;
+                        state = normalizeState(importedState);
                         state.activeFileName = fileName;
                         state.isDirty = false;
                         saveState(true);
@@ -788,6 +792,20 @@
             const d = new Date();
             return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         };
+        // 'YYYY-MM-DD' interprété en date LOCALE (new Date('YYYY-MM-DD') = minuit UTC)
+        const parseLocalDate = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
+        const fmtDate = (s) => parseLocalDate(s).toLocaleDateString('fr-FR');
+        // Échappement HTML : les noms d'exercices/programmes sont injectés dans des templates
+        const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        // Nombre saisi au clavier FR : accepte la virgule ("52,5" → 52.5) ; NaN si non numérique (ex. "PDC")
+        const parseNum = (v) => { const n = parseFloat(String(v ?? '').trim().replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
+        const num0 = (v) => { const n = parseNum(v); return Number.isFinite(n) ? n : 0; };
+        const fmtNum = (n) => String(Math.round(n * 100) / 100).replace('.', ',');
+        // Une série compte comme réalisée sauf si elle est explicitement marquée non faite (done === false).
+        // Les données antérieures à v3.0 n'ont pas de champ done : elles restent comptées.
+        const setHasValue = (s) => !!s && ((s.poids ?? '').toString().trim() !== '' || (s.reps ?? '').toString().trim() !== '');
+        const setIsDone = (s) => setHasValue(s) && s.done !== false;
+        const doneSets = (entry) => (entry?.sets || []).filter(setIsDone);
 
         // Debounced saveState
         let _saveTimeout = null;
@@ -850,10 +868,12 @@
                 for (const exoName in state.performance[progName]) {
                     const cleanedHistory = state.performance[progName][exoName].filter(entry => {
                         if (entry.date === today) { return true; }
-                        return (entry.sets || []).some(set =>
-                            (set.poids && set.poids.toString().trim() !== '') ||
-                            (set.reps && set.reps.toString().trim() !== '')
-                        );
+                        // Séance passée : seules les séries EXPLICITEMENT non validées (done === false, v3.0+) sont retirées.
+                        // Les données plus anciennes (sans champ done) ne sont jamais modifiées.
+                        if ((entry.sets || []).some(s => s && s.done === false)) {
+                            entry.sets = entry.sets.filter(s => !(s && s.done === false));
+                        }
+                        return (entry.sets || []).some(setHasValue);
                     });
                     if (cleanedHistory.length === 0) {
                         delete state.performance[progName][exoName];
@@ -907,21 +927,36 @@
             saveState();
         };
 
+        // Rend un état chargé (localStorage, Drive, fichier) sûr à afficher, sans perdre de donnée
+        const normalizeState = (st) => {
+            st.programs = st.programs && typeof st.programs === 'object' ? st.programs : {};
+            st.performance = st.performance && typeof st.performance === 'object' ? st.performance : {};
+            Object.values(st.programs).forEach(p => {
+                if (!Array.isArray(p.exercises)) p.exercises = [];
+                p.exercises.forEach(ex => { if (typeof ex.Exercice !== 'string') ex.Exercice = String(ex.Exercice ?? ''); });
+            });
+            const known = Array.isArray(st.programOrder) ? st.programOrder.filter(n => st.programs[n]) : [];
+            Object.keys(st.programs).forEach(n => { if (!known.includes(n)) known.push(n); });
+            st.programOrder = known;
+            st.activeFileName = st.activeFileName || null;
+            st.isDirty = !!st.isDirty;
+            st.theme = st.theme || 'dark';
+            if (!st.currentProgram || !st.programs[st.currentProgram]) st.currentProgram = st.programOrder[0] || null;
+            return st;
+        };
+
         const loadState = () => {
             const savedState = localStorage.getItem('fitnessTrackerState');
             if (savedState) {
                 try { state = JSON.parse(savedState); }
-                catch (e) { console.error("localStorage corrompu, réinitialisation.", e); localStorage.removeItem('fitnessTrackerState'); }
+                catch (e) {
+                    // On ne détruit pas la donnée illisible : copie de secours avant réinitialisation
+                    console.error("localStorage corrompu, réinitialisation.", e);
+                    try { localStorage.setItem('fitnessTrackerState_corrompu_' + Date.now(), savedState); } catch (_) {}
+                    localStorage.removeItem('fitnessTrackerState');
+                }
             }
-            state.programs = state.programs || {};
-            state.performance = state.performance || {};
-            state.programOrder = state.programOrder || Object.keys(state.programs);
-            state.activeFileName = state.activeFileName || null;
-            state.isDirty = state.isDirty || false;
-            state.theme = state.theme || 'dark';
-            if (!state.currentProgram || !state.programs[state.currentProgram]) {
-                state.currentProgram = state.programOrder[0] || null;
-            }
+            normalizeState(state);
         };
 
         const renderHeader = (overrideLabel = null) => {
@@ -1183,7 +1218,7 @@
                         <h3 class="font-semibold mb-2 text-secondary">Programmes existants <span class="text-xs font-normal">(cliquer sur le nom pour renommer)</span></h3>
                         <div class="space-y-2">`;
             state.programOrder.forEach((name, index) => {
-                editorHTML += `<div class="flex items-center justify-between bg-secondary p-2 rounded-md program-editor-item"><input type="text" value="${name}" class="program-name-input bg-transparent font-semibold flex-grow focus:outline-none" data-old-name="${name}"><div class="flex items-center"><button data-action="move-program" data-direction="up" data-index="${index}" class="p-1 icon-btn ${index === 0 ? 'opacity-25' : ''}" title="Monter"><i class="fa-solid fa-arrow-up pointer-events-none"></i></button><button data-action="move-program" data-direction="down" data-index="${index}" class="p-1 icon-btn ${index === state.programOrder.length - 1 ? 'opacity-25' : ''}" title="Descendre"><i class="fa-solid fa-arrow-down pointer-events-none"></i></button><button data-action="duplicate-program" data-name="${name}" class="p-1 icon-btn" title="Dupliquer"><i class="fa-solid fa-copy pointer-events-none"></i></button><button data-action="delete-program" data-name="${name}" class="p-1 icon-btn" title="Supprimer"><i class="fa-solid fa-trash-can pointer-events-none"></i></button></div></div>`;
+                editorHTML += `<div class="flex items-center justify-between bg-secondary p-2 rounded-md program-editor-item"><input type="text" value="${esc(name)}" class="program-name-input bg-transparent font-semibold flex-grow min-w-0 focus:outline-none" data-old-name="${esc(name)}"><div class="flex items-center"><button data-action="move-program" data-direction="up" data-index="${index}" class="p-1 icon-btn ${index === 0 ? 'opacity-25' : ''}" title="Monter"><i class="fa-solid fa-arrow-up pointer-events-none"></i></button><button data-action="move-program" data-direction="down" data-index="${index}" class="p-1 icon-btn ${index === state.programOrder.length - 1 ? 'opacity-25' : ''}" title="Descendre"><i class="fa-solid fa-arrow-down pointer-events-none"></i></button><button data-action="duplicate-program" data-name="${esc(name)}" class="p-1 icon-btn" title="Dupliquer"><i class="fa-solid fa-copy pointer-events-none"></i></button><button data-action="delete-program" data-name="${esc(name)}" class="p-1 icon-btn" title="Supprimer"><i class="fa-solid fa-trash-can pointer-events-none"></i></button></div></div>`;
             });
             editorHTML += `</div>
                     </div>
@@ -1212,7 +1247,7 @@
                         <div class="space-y-2">
                             <div>
                                 <label class="text-xs text-secondary">Folder ID (dossier Drive cible)</label>
-                                <input type="text" id="drive-folder-id" value="${cfg.folderId}" placeholder="ID du dossier Drive" class="w-full mt-1 p-2 rounded-md input-bg text-sm focus:outline-none focus:border-cyan-500">
+                                <input type="text" id="drive-folder-id" value="${esc(cfg.folderId)}" placeholder="ID du dossier Drive" class="w-full mt-1 p-2 rounded-md input-bg text-sm focus:outline-none focus:border-cyan-500">
                             </div>
                             <button id="save-drive-config-btn" class="w-full p-2 rounded-md text-sm font-semibold mt-1" style="background: linear-gradient(45deg, #4285F4, #34A853); color: white; border: none;">
                                 <i class="fa-solid fa-floppy-disk mr-1"></i>Sauvegarder config Drive
@@ -1231,7 +1266,7 @@
             });
         };
 
-        const renderHistoryModal = (exerciseName, period = '3m') => {
+        const renderHistoryModal = (exerciseName, period = 'all') => {
             let history = state.performance[state.currentProgram]?.[exerciseName] || [];
             if (!Array.isArray(history)) history = [];
 
@@ -1242,12 +1277,12 @@
             else if (period === '1y') startDate.setFullYear(now.getFullYear() - 1);
             else startDate = new Date(0);
 
-            const filteredHistory = history.filter(e => new Date(e.date) >= startDate);
+            const filteredHistory = history.filter(e => parseLocalDate(e.date) >= startDate).map(e => ({ ...e, sets: doneSets(e) })).filter(e => e.sets.length);
 
             let listHTML = '<p class="text-secondary">Aucun historique pour cette période.</p>';
             if (filteredHistory.length > 0) {
                 const groupedByMonth = filteredHistory.slice().reverse().reduce((acc, entry) => {
-                    const month = new Date(entry.date).toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+                    const month = parseLocalDate(entry.date).toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
                     if (!acc[month]) acc[month] = [];
                     acc[month].push(entry);
                     return acc;
@@ -1255,13 +1290,13 @@
 
                 listHTML = Object.entries(groupedByMonth).map(([month, entries]) => {
                     const entriesHTML = entries.map(entry => {
-                        const sets = (entry.sets || []).filter(s => s.poids || s.reps).map(s => `${s.poids || '-'}kg x ${s.reps || '-'}`).join(' / ');
+                        const sets = (entry.sets || []).filter(s => s.poids || s.reps).map(s => `${esc(s.poids || '-')}${Number.isFinite(parseNum(s.poids)) ? 'kg' : ''} × ${esc(s.reps || '-')}`).join(' · ');
                         return `<div class="p-2 bg-secondary rounded-md flex justify-between items-center">
                             <div>
-                                <p class="font-semibold">${new Date(entry.date).toLocaleDateString('fr-FR')}</p>
+                                <p class="font-semibold">${fmtDate(entry.date)}</p>
                                 <p class="text-sm text-secondary">${sets}</p>
                             </div>
-                            <button data-action="delete-perf-entry" data-date="${entry.date}" data-exercise-name="${exerciseName}" class="icon-btn text-sm" title="Supprimer cette entrée"><i class="fa-solid fa-trash-can"></i></button>
+                            <button data-action="delete-perf-entry" data-date="${esc(entry.date)}" data-exercise-name="${esc(exerciseName)}" class="icon-btn text-sm" title="Supprimer cette entrée"><i class="fa-solid fa-trash-can"></i></button>
                         </div>`;
                     }).join('');
                     return `<div class="mb-3"><h4 class="font-bold text-secondary mb-2">${month.charAt(0).toUpperCase() + month.slice(1)}</h4><div class="space-y-2">${entriesHTML}</div></div>`;
@@ -1273,13 +1308,13 @@
                 { label: '1 An', value: '1y' }, { label: 'Tout', value: 'all' }
             ];
             const filterHTML = periodFilters.map(f => 
-                `<button class="filter-btn text-xs px-3 py-1 rounded-md ${period === f.value ? 'active' : ''}" data-action="filter-history" data-period="${f.value}" data-exercise-name="${exerciseName}">${f.label}</button>`
+                `<button class="filter-btn text-sm px-3 rounded-md ${period === f.value ? 'active' : ''}" data-action="filter-history" data-period="${f.value}" data-exercise-name="${esc(exerciseName)}">${f.label}</button>`
             ).join('');
 
             historyModalContainer.innerHTML = `<div class="modal-backdrop absolute inset-0" data-action="close-modal"></div>
             <div class="bg-card rounded-lg shadow-xl w-full max-w-2xl m-4 p-6 relative flex flex-col max-h-[80vh] border border-border-hover">
                 <div class="flex justify-between items-center mb-4 pb-4 border-b border-border-color">
-                    <h2 class="text-xl font-bold exercise-title truncate pr-4">${exerciseName}</h2>
+                    <h2 class="text-xl font-bold exercise-title truncate pr-4">${esc(exerciseName)}</h2>
                     <button data-action="close-modal" class="p-1 text-2xl icon-btn">&times;</button>
                 </div>
                 <div class="flex items-center justify-between mb-3">
@@ -1298,7 +1333,7 @@
 
             let isBodyweight = false;
             if (allWeights.length > 0) {
-                isBodyweight = allWeights.every(p => isNaN(parseFloat(p)));
+                isBodyweight = allWeights.every(p => isNaN(parseNum(p)));
             }
 
             const chartTitle = document.getElementById('chart-title');
@@ -1307,9 +1342,9 @@
             const chartData = filteredHistory.map(e => ({
                 x: e.date,
                 y: (e.sets || []).reduce((acc, s) => {
-                    const reps = parseInt(s.reps) || 0;
+                    const reps = num0(s.reps);
                     if (isBodyweight) return acc + reps;
-                    const poids = parseFloat(s.poids) || 0;
+                    const poids = num0(s.poids);
                     return acc + (poids * reps);
                 }, 0)
             })).filter(d => d.y > 0);
@@ -1378,14 +1413,14 @@
             Object.entries(state.performance).forEach(([progName, exercises]) => {
                 Object.entries(exercises).forEach(([exoName, history]) => {
                     history.forEach(entry => {
-                        if (new Date(entry.date) >= startDate) {
-                            allPerfsInPeriod.push({ ...entry, exerciseName: exoName });
+                        if (parseLocalDate(entry.date) >= startDate && doneSets(entry).length) {
+                            allPerfsInPeriod.push({ ...entry, sets: doneSets(entry), exerciseName: exoName });
                         }
                     });
                 });
             });
 
-            const allPerfDates = new Set(Object.values(state.performance).flatMap(p => Object.values(p).flat()).map(e => e.date));
+            const allPerfDates = new Set(Object.values(state.performance).flatMap(p => Object.values(p).flat()).filter(e => doneSets(e).length).map(e => e.date));
             const today = new Date();
             const year = today.getFullYear();
             const month = today.getMonth();
@@ -1401,7 +1436,7 @@
             }
             
             const sessionsInPeriod = new Set(allPerfsInPeriod.map(p => p.date)).size;
-            const totalVolumeInPeriod = allPerfsInPeriod.reduce((total, p) => total + (p.sets || []).reduce((acc, s) => acc + ((parseFloat(s.poids)||0) * (parseInt(s.reps)||0)), 0), 0);
+            const totalVolumeInPeriod = allPerfsInPeriod.reduce((total, p) => total + (p.sets || []).reduce((acc, s) => acc + (num0(s.poids) * num0(s.reps)), 0), 0);
             
             const muscleCounts = {};
             allPerfsInPeriod.forEach(p => {
@@ -1414,18 +1449,14 @@
             for (const [progName, program] of Object.entries(state.programs)) {
                 for (const exo of (program.exercises || [])) {
                     if (!exo.Groupe || !state.performance[progName]?.[exo.Exercice]) continue;
+                    const score = (s) => num0(s.poids) * (1 + num0(s.reps) / 30); // 1RM estimé (Epley)
                     const bestSet = state.performance[progName][exo.Exercice]
-                        .flatMap(e => (e.sets || []).map(s => ({...s, date: e.date})))
-                        .filter(s => s.poids && s.reps && !isNaN(parseFloat(s.poids)) && s.poids.toString().trim().toLowerCase() !== 'pdc')
-                        .reduce((best, current) => {
-                            if (!best.poids) return current;
-                            const bestScore = (parseFloat(best.poids) || 0) * (1 + (parseInt(best.reps) || 0) / 30);
-                            const currentScore = (parseFloat(current.poids) || 0) * (1 + (parseInt(current.reps) || 0) / 30);
-                            return currentScore > bestScore ? current : best;
-                        }, {});
+                        .flatMap(e => doneSets(e).map(s => ({...s, date: e.date})))
+                        .filter(s => s.poids && s.reps && Number.isFinite(parseNum(s.poids)))
+                        .reduce((best, current) => (!best.poids || score(current) > score(best)) ? current : best, {});
                     if(bestSet && bestSet.poids) {
-                        const existingPrScore = prs[exo.Groupe] ? (parseFloat(prs[exo.Groupe].poids) * (1 + parseInt(prs[exo.Groupe].reps) / 30)) : 0;
-                        const newPrScore = (parseFloat(bestSet.poids) * (1 + parseInt(bestSet.reps) / 30));
+                        const existingPrScore = prs[exo.Groupe] ? score(prs[exo.Groupe]) : 0;
+                        const newPrScore = score(bestSet);
                         if (newPrScore > existingPrScore) {
                            prs[exo.Groupe] = { ...bestSet, name: exo.Exercice };
                         }
@@ -1435,9 +1466,9 @@
             
             let prHTML = Object.entries(prs).map(([group, pr]) => `
                 <div class="p-2 bg-secondary rounded-md text-sm">
-                    <p class="font-bold text-secondary">${group}</p>
-                    <p class="font-semibold text-main">${pr.name}</p>
-                    <p class="text-cyan-400">${pr.poids}kg x ${pr.reps} reps <span class="text-xs text-secondary">(${new Date(pr.date).toLocaleDateString('fr-FR')})</span></p>
+                    <p class="font-bold text-secondary">${esc(group)}</p>
+                    <p class="font-semibold text-main">${esc(pr.name)}</p>
+                    <p class="text-cyan-400">${esc(pr.poids)} kg × ${esc(pr.reps)} reps <span class="text-xs text-secondary">(${fmtDate(pr.date)})</span></p>
                 </div>
             `).join('');
             if (!prHTML) prHTML = `<p class="text-sm text-secondary">Aucun record trouvé.</p>`;
@@ -1447,7 +1478,7 @@
                 { label: 'Année', value: 'year' }, { label: 'Tout', value: 'all' }
             ];
             const filterHTML = periodFilters.map(f => 
-                `<button class="filter-btn text-xs px-3 py-1 rounded-md ${period === f.value ? 'active' : ''}" data-action="filter-stats" data-period="${f.value}">${f.label}</button>`
+                `<button class="filter-btn text-sm px-3 rounded-md ${period === f.value ? 'active' : ''}" data-action="filter-stats" data-period="${f.value}">${f.label}</button>`
             ).join('');
 
             globalStatsModalContainer.innerHTML = `<div class="modal-backdrop absolute inset-0" data-action="close-modal"></div>
@@ -1509,7 +1540,7 @@
             if (!todayEntry) {
                 todayEntry = { date: today, sets: [{}, {}, {}, {}] };
                 perfHistory.push(todayEntry);
-                perfHistory.sort((a,b) => new Date(a.date) - new Date(b.date));
+                perfHistory.sort((a,b) => a.date.localeCompare(b.date));
             }
             return todayEntry;
         };
@@ -1620,7 +1651,7 @@
 
         const handleBackup = async () => {
             cleanupEmptyPerformances();
-            const dateString = new Date().toISOString().slice(0, 10);
+            const dateString = getLocalToday();
             const filename = `backup_fitness_${dateString}.json`;
             const backupState = { ...state, isDirty: false };
             const jsonContent = JSON.stringify(backupState, null, 2);
@@ -1664,6 +1695,7 @@
         };
 
         const handleImport = async (isMerge = false) => {
+            if (!isMerge && !confirmOverwrite()) return;
             if (isFileSystemAccessAPISupported) {
                 try {
                     const pickerOpts = {
@@ -1697,6 +1729,11 @@
                                 if (!state.programs[progName]) {
                                     state.programs[progName] = importedState.programs[progName];
                                     if (!state.programOrder.includes(progName)) state.programOrder.push(progName);
+                                } else {
+                                    const mine = state.programs[progName].exercises || (state.programs[progName].exercises = []);
+                                    (importedState.programs[progName].exercises || []).forEach(ex => {
+                                        if (ex && ex.Exercice && !mine.some(m => m.Exercice.trim() === ex.Exercice.trim())) mine.push(ex);
+                                    });
                                 }
                             });
                         }
@@ -1716,7 +1753,7 @@
                         mergedCount++;
                     }
                     Object.values(state.performance).forEach(prog => {
-                        Object.values(prog).forEach(exoHistory => exoHistory.sort((a,b) => new Date(a.date) - new Date(b.date)));
+                        Object.values(prog).forEach(exoHistory => exoHistory.sort((a,b) => a.date.localeCompare(b.date)));
                     });
                     if(mergedCount > 0) {
                         markDirty(); refreshAll();
@@ -1727,9 +1764,9 @@
                     const content = await file.text();
                     const importedState = JSON.parse(content);
                     if (importedState.programs && importedState.performance) {
-                        state = importedState;
+                        state = normalizeState(importedState);
                         state.activeFileName = file.name; state.isDirty = false;
-                        markDirty(); refreshAll();
+                        saveState(true); refreshAll();
                         showToast('Backup importé avec succès !');
                     } else { throw new Error("Format de fichier invalide."); }
                 }
@@ -1742,7 +1779,9 @@
         function handleSwipe() {
             if (!state.programOrder || state.programOrder.length < 2) return;
             const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
             const minSwipeDistance = 100;
+            if (Math.abs(deltaX) < Math.abs(deltaY) * 2) return; // défilement vertical : ne pas changer de programme
             const currentIndex = state.programOrder.indexOf(state.currentProgram);
             if (currentIndex === -1) return;
             let newIndex = currentIndex;
@@ -1764,8 +1803,11 @@
             }
         }
 
-        mainContent.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
-        mainContent.addEventListener('touchend', e => { touchEndX = e.changedTouches[0].screenX; handleSwipe(); }, { passive: true });
+        mainContent.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY; }, { passive: true });
+        mainContent.addEventListener('touchend', e => {
+            if (e.target.closest('input, [contenteditable="true"], .no-swipe')) return;
+            touchEndX = e.changedTouches[0].screenX; touchEndY = e.changedTouches[0].screenY; handleSwipe();
+        }, { passive: true });
 
         fileInput.addEventListener('change', (e) => {
             const files = e.target.files;
@@ -2092,7 +2134,7 @@
                 }
                 case 'delete-perf-entry': {
                     const { date, exerciseName } = target.dataset;
-                    if (confirm(`Voulez-vous vraiment supprimer la séance du ${new Date(date).toLocaleDateString('fr-FR')} pour "${exerciseName}" ?`)) {
+                    if (confirm(`Voulez-vous vraiment supprimer la séance du ${fmtDate(date)} pour "${exerciseName}" ?`)) {
                         const perfHistory = state.performance[programName]?.[exerciseName];
                         if (perfHistory) {
                             const entryIndex = perfHistory.findIndex(e => e.date === date);
@@ -2100,7 +2142,7 @@
                                 perfHistory.splice(entryIndex, 1);
                                 markDirty();
                                 showToast('Entrée supprimée.');
-                                renderHistoryModal(exerciseName, document.querySelector('#history-modal .filter-btn.active')?.dataset.period || '3m');
+                                renderHistoryModal(exerciseName, document.querySelector('#history-modal .filter-btn.active')?.dataset.period || 'all');
                             }
                         }
                     }
@@ -2267,15 +2309,17 @@
                 dbRequest.onsuccess = async () => {
                     backupDirectoryHandle = await getDirectoryHandle();
                     if (backupDirectoryHandle) console.log("Un dossier de backup a été trouvé en mémoire.");
-                    else showToast("Pensez à choisir un dossier pour les backups via les réglages.");
                 };
                 dbRequest.onerror = () => showToast("Impossible d'utiliser la base de données locale.", true);
-            } else {
-                showToast("Le mode de sauvegarde avancé n'est pas supporté par ce navigateur.", true);
             }
         }
 
         init();
+
+        // Le debounce de 300 ms peut perdre la dernière saisie si l'app est fermée juste après
+        const flushSave = () => { if (_saveTimeout) { clearTimeout(_saveTimeout); _saveTimeout = null; _saveStateImmediate(); } };
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
+        window.addEventListener('pagehide', flushSave);
 
         // === Service Worker + Update notification ===
         if ('serviceWorker' in navigator) {
