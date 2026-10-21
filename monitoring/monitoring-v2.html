@@ -645,7 +645,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.45.1-studio-dk-v271';
+    const VERSION = 'v2.46.0-dk-accueil-v274';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1346,7 +1346,7 @@
       const headers = { Authorization: `Bearer ${getToken(cfg)}` };
       const j = async url => { const r = await fetch(url, { signal, headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); };
       const pub = (url, fallback) => fetch(url, { signal }).then(r => r.json()).catch(() => fallback);
-      const [mon, stats, dev, visit, click, play, fb, src] = await Promise.all([
+      const [mon, stats, dev, visit, click, play, fb, src, fun] = await Promise.all([
         j(`${DK_GATEWAY}/admin/monitoring?period=${DK_PERIOD}&advanced=1`),
         j(`${DK_GATEWAY}/admin/stats`),
         j(`${DK_GATEWAY}/admin/devices`),
@@ -1357,9 +1357,10 @@
         // via updateKpiDevices) disparaît. Chiffres finaux identiques, un seul rendu.
         j(`${DK_GATEWAY}/admin/playstore-stats`).catch(() => null),
         j(`${DK_GATEWAY}/admin/firebase-stats?period=7d`).catch(() => null),   // toléré (cache KV 1h, données J-1)
-        j(`${DK_GATEWAY}/admin/source-split`).catch(() => null)   // v2.45.0 : bulle / clavier / les deux (gateway v1.8.0)
+        j(`${DK_GATEWAY}/admin/source-split`).catch(() => null),   // v2.45.0 : bulle / clavier / les deux (gateway v1.8.0)
+        j(`${DK_GATEWAY}/admin/funnel?days=28`).catch(() => null)   // v2.46.0 : nouvel accueil de l'app v2.74.0 (gateway v1.11.0)
       ]);
-      return { mon, stats, dev, visit, click, play, fb, src };
+      return { mon, stats, dev, visit, click, play, fb, src, fun };
     }
 
     function dkPctChange(today, yesterday) {
@@ -1608,6 +1609,58 @@
       };
       return `<div class="donut-grid">${bloc(src.j7, '7 derniers jours')}${bloc(src.j30, '30 derniers jours')}</div>`
         + `<div class="lg-row" style="opacity:.6;font-size:12px">${src.note || ''}</div>`;
+    }
+
+    // v2.46.0 — Nouvel accueil (app v2.74.0, refonte 21/10/2026). Source : GET /admin/funnel?days=28 (gateway v1.11.0),
+    // entonnoirs FERMÉS par utilisateur. GA4 ne renvoie pas les étapes à 0 : une étape absente des lignes = 0.
+    // Tant que la v2.74.0 n'est pas en production, seule l'étape first_open existe : on le dit au lieu d'afficher 0 %.
+    function renderDkAccueil(fun) {
+      if (!fun || !fun.funnels) return `<div class="no-data">⏳ Route /admin/funnel indisponible</div>`;
+      const LIB = { first_open: 'Installation (1ʳᵉ ouverture)', onb_try_started: 'Essai de dictée lancé', onb_try_succeeded: 'Essai réussi',
+        onboarding_completed: 'Accueil terminé', first_dictation: '1ʳᵉ vraie dictée', onb_path_bubble: 'Choix : bulle',
+        onb_path_keyboard: 'Choix : clavier', onb_perm1_ok: 'Autorisation 1 sur 2', onb_perm2_ok: 'Autorisation 2 sur 2',
+        onb_rehearsal_ok: 'Répétition réussie' };
+      const bloc = (key, titre) => {
+        const f = fun.funnels[key];
+        if (!f || f.error) return `<div class="fb-card"><div class="chart-title">${titre}</div><div class="no-data">⚠ ${safeText((f && f.error) || 'entonnoir absent')}</div></div>`;
+        const byStep = {};
+        (f.rows || []).forEach(r => { const m = /^(\d+)\.\s/.exec(r.step || ''); if (m) byStep[Number(m[1]) - 1] = r.users || 0; });
+        const vals = f.steps.map((_, i) => byStep[i] || 0);
+        const top = vals[0] || 0;
+        if (!vals.slice(1).some(v => v > 0))
+          return `<div class="fb-card"><div class="chart-title">${titre}</div><div class="no-data">⏳ Pas encore de donnée — mesuré à partir de l’app v2.74.0</div></div>`;
+        const lignes = f.steps.map((s, i) => `<div class="step"><div class="step-head"><span>${safeText(LIB[s] || s)}</span>`
+          + `<b>${dkNum(vals[i])}${i ? ` · ${dkPct(vals[i], top)} %` : ''}</b></div>`
+          + `<div class="step-bar"><i style="width:${top > 0 ? Math.max(2, vals[i] / top * 100) : 2}%"></i></div></div>`).join('');
+        return `<div class="fb-card"><div class="chart-title">${titre}</div>${lignes}</div>`;
+      };
+      return `<div class="fb-grid">${bloc('accueil_essai', '🎙 Essai de dictée')}${bloc('accueil_bulle', '🫧 Chemin bulle')}`
+        + `${bloc('accueil_clavier', '⌨ Chemin clavier')}</div>`
+        + `<div class="lg-row" style="opacity:.6;font-size:12px">${fun.days || 28} jours · utilisateurs par étape, dans l’ordre · % = part des installations · données J-1 (cache 1 h)</div>`;
+    }
+
+    // v2.46.0 — Usage des fonctions (événement feature_used, app v2.74.0). Source : /admin/firebase-stats
+    // (aggregated.usage_fonctions). La dimension GA4 `feature` doit être déclarée à la main (Administration ›
+    // Définitions personnalisées) : sans elle, la passerelle rend une erreur explicite qu'on traduit ici.
+    function renderDkUsage(fb) {
+      const rows = fb && fb.aggregated && fb.aggregated.usage_fonctions;
+      const err = fb && fb.errors && fb.errors.usage_fonctions;
+      if (!rows) {
+        if (err && /not a valid dimension/i.test(err))
+          return `<div class="no-data">⚙ Dimension GA4 « feature » pas encore déclarée (Administration › Définitions personnalisées)</div>`;
+        return `<div class="no-data">⏳ ${err ? safeText(err) : 'En attente'}</div>`;
+      }
+      if (!rows.length) return `<div class="no-data">⏳ Pas encore de donnée — mesuré à partir de l’app v2.74.0</div>`;
+      const LIB = { interpreter: 'Interprète', copy_last: 'Copier la dernière dictée', translate_clipboard: 'Traduire le presse-papiers',
+        transcribe_audio: 'Transcrire un audio', dock_action: 'Panneau de glisser' };
+      const par = {};
+      rows.forEach(r => { const p = par[r.feature] = par[r.feature] || { count: 0, users: 0, src: {} };
+        p.count += r.count; p.users += r.users; p.src[r.source] = (p.src[r.source] || 0) + r.count; });
+      return Object.keys(par).sort((a2, b) => par[b].count - par[a2].count).map(k => {
+        const p = par[k];
+        const src = Object.keys(p.src).sort((a2, b) => p.src[b] - p.src[a2]).map(s => `${safeText(s)} ${p.src[s]}`).join(' · ');
+        return `<div class="sm">• <b>${safeText(LIB[k] || k)}</b> : ${dkNum(p.count)} fois, ${dkNum(p.users)} utilisateurs <i>(${src})</i></div>`;
+      }).join('') + `<div class="lg-row" style="opacity:.6;font-size:12px">7 jours · aucun texte n’est envoyé, seulement le nom de la fonction et son origine</div>`;
     }
 
     function renderDkAdoption(fb) {
@@ -2643,7 +2696,7 @@
 
     function renderDkView(payload) {
       if (!payload || !payload.mon) return EmptyState('DictoKey', 'Aucune donnée reçue du gateway.');
-      const { mon, stats, dev, visit, click, play, fb, src } = payload;
+      const { mon, stats, dev, visit, click, play, fb, src, fun } = payload;
       const ds = dkDeviceStats(dev);
       // Devices triés par lastSeen desc (comme la prod). Les filtres/la page sont conservés entre les rendus.
       dkDevState.all = ds.devicesList.slice().sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
@@ -2789,6 +2842,8 @@
         + `<section class="section">${Panel('dk-play', '📥 Play Store — adoption & activité', psHtml, true)}</section>`
         + `<section class="section">${Panel('dk-activity', '📈 Activité', activity, true)}</section>`
         + `<section class="section">${Panel('dk-source', '🫧⌨ Bulle ou clavier ?', renderDkSourceSplit(src), true)}</section>`
+        + `<section class="section">${Panel('dk-accueil', '🚪 Nouvel accueil (v2.74)', renderDkAccueil(fun), true)}</section>`
+        + `<section class="section">${Panel('dk-usage', '🧰 Usage des fonctions', renderDkUsage(fb), false)}</section>`
         + `<section class="section">${Panel('dk-perf', '⚡ Performance API', perf, false)}</section>`
         + `<section class="section">${Panel('dk-split', '🌍 Répartition', donuts, false)}</section>`
         + `<section class="section">${Panel('dk-fb', '📊 Activation & engagement (Firebase J-1)', renderDkFirebase(fb), false)}</section>`
