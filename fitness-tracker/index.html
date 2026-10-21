@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- deploy test 2026-02-22 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Fitness Tracker v3.2</title>
+    <title>Fitness Tracker v3.3</title>
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -444,6 +444,9 @@
         .notes-full b { color: var(--glow-orange); font-weight: 600; margin-right: 4px; }
         .notes-edit { align-self: flex-start; height: 36px; padding: 0 12px; border-radius: 8px; font-weight: 600; color: var(--glow-exo-title); background: var(--surface-2); }
         .resume { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: color-mix(in srgb, var(--glow-orange) 14%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glow-orange) 50%, transparent); font-size: 13px; }
+        .prog-last { font-size: 13px; color: var(--text-secondary); padding: 2px 4px; }
+        .prog-last b { color: var(--text-main); font-weight: 600; }
+        .prog-last i { color: var(--program-color); margin-right: 4px; }
         .resume p { flex: 1; min-width: 0; }
         .resume b { color: var(--glow-orange); }
         .resume button { height: 44px; padding: 0 12px; border-radius: 10px; font-weight: 600; flex: none; }
@@ -539,7 +542,7 @@
         </header>
 
         <div id="app-menu" class="hidden" role="menu">
-            <div class="st"><i id="menu-dirty" class="d hidden"></i><span id="active-backup-name">Aucun fichier</span><span id="drive-api-dot" class="api" title="API Drive"></span><span>v3.2</span></div>
+            <div class="st"><i id="menu-dirty" class="d hidden"></i><span id="active-backup-name">Aucun fichier</span><span id="drive-api-dot" class="api" title="API Drive"></span><span>v3.3</span></div>
             <button data-action="header-backup"><i class="fa-solid fa-download pointer-events-none" style="color:var(--glow-green)"></i>Sauvegarder (local)</button>
             <button data-action="header-drive-save"><i class="fa-brands fa-google-drive pointer-events-none" style="color:#4285F4"></i>Sauvegarder sur Drive</button>
             <hr>
@@ -902,7 +905,7 @@
                 programmes[prog] = { derniere_seance: last, jours_depuis: Math.round((parseLocalDate(today) - parseLocalDate(last)) / 86400000),
                     exercices_faits: faits, non_executes_volontairement: nonExecutes, non_enregistres: nonEnregistres };
             });
-            return { genere_le: new Date().toLocaleString('fr-FR'), application: 'Fitness Tracker v3.2', programme_en_cours: st.currentProgram || null, programmes };
+            return { genere_le: new Date().toLocaleString('fr-FR'), application: 'Fitness Tracker v3.3', programme_en_cours: st.currentProgram || null, programmes };
         };
         const exportState = () => {
             const out = JSON.parse(JSON.stringify({ _lisez_moi: FORMAT_NOTE, _resume: null, ...state, isDirty: false }));
@@ -1210,7 +1213,15 @@
             if (ui.reprise[prog] === getLocalToday())
                 return `<div class="resume"><p>Charges <b>−${pct} %</b> appliquées (reprise après ${when}).</p><button data-action="reprise-undo">Annuler</button></div>`;
             if (ui.dismissed[prog] === getLocalToday()) return '';
-            return `<div class="resume"><p>Dernière séance il y a <b>${when}</b> — charges <b>−${pct} %</b> ?</p><button class="y" data-action="reprise-apply">Appliquer</button><button data-action="reprise-dismiss">Ignorer</button></div>`;
+            return `<div class="resume"><p>Dernière séance le ${fmtDateShort(d)}, il y a <b>${when}</b> — charges <b>−${pct} %</b> ?</p><button class="y" data-action="reprise-apply">Appliquer</button><button data-action="reprise-dismiss">Ignorer</button></div>`;
+        };
+
+        // Date de la dernière séance du programme (le bandeau de reprise la porte déjà quand il s'affiche)
+        const progLastHTML = (prog) => {
+            const d = lastSessionDate(prog);
+            if (!d) return '<div class="prog-last"><i class="fa-regular fa-calendar"></i> Première séance de ce programme</div>';
+            const day = parseLocalDate(d).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit', year: d.slice(0, 4) === getLocalToday().slice(0, 4) ? undefined : 'numeric' });
+            return `<div class="prog-last"><i class="fa-regular fa-calendar"></i> Dernière séance : <b>${day}</b> · <span style="white-space:nowrap">${agoTxt(d)}</span></div>`;
         };
 
         const collapsedCardHTML = (prog, ex, i, isActive) => {
@@ -1295,7 +1306,7 @@
             }
             const act = activeIndex(programName);
             const wide = isWide();
-            let html = repriseBannerHTML(programName);
+            let html = repriseBannerHTML(programName) || progLastHTML(programName);
             exs.forEach((ex, i) => { html += (i === act && !wide && !isSkipped(programName, ex)) ? fullCardHTML(programName, ex, i) : collapsedCardHTML(programName, ex, i, i === act); });
             exerciseList.innerHTML = html;
             if (wide) detailPane.innerHTML = act >= 0 ? fullCardHTML(programName, exs[act], act)
