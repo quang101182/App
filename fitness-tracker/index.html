@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- deploy test 2026-02-22 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Fitness Tracker v3.3</title>
+    <title>Fitness Tracker v3.4</title>
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -426,14 +426,17 @@
         .chk { width: 44px; height: 40px; flex: none; border-radius: 8px; font-size: 16px; color: var(--text-secondary); border: 1px solid var(--border-color); }
         .set.ok .chk { background: var(--glow-green); color: #04130a; border-color: transparent; }
         .delta { font-size: 11px; font-weight: 700; }
-        .cur { border-radius: 12px; padding: 8px; background: color-mix(in srgb, var(--program-color) 12%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--program-color) 60%, transparent); }
+        .cur { border-radius: 12px; padding: 8px 4px 8px 8px; background: color-mix(in srgb, var(--program-color) 12%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--program-color) 60%, transparent); }
         .cur-lbl { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; min-height: 16px; }
         .cur-lbl span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cur-lbl b { color: var(--program-color); }
-        .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .steps { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) 44px; gap: 8px; align-items: center; }
+        .cur .chk { height: 52px; }
+        .cur.ok .chk { background: var(--glow-green); color: #04130a; border-color: transparent; }
         .step { display: grid; grid-template-columns: 44px 1fr 44px; height: 52px; border-radius: 10px; background: var(--surface-2); overflow: hidden; touch-action: manipulation; }
         .step button { font-size: 22px; font-weight: 700; color: var(--glow-exo-title); }
         .step button:active { background: rgba(34,211,238,.18); }
+        @media (max-width: 399px) { .step { grid-template-columns: 36px 1fr 36px; } }
         .step .val { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; min-width: 0; cursor: text; }
         .step .val strong { font-size: 20px; font-variant-numeric: tabular-nums; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
         .step .val small { font-size: 10px; color: var(--text-secondary); margin-top: 3px; }
@@ -515,6 +518,7 @@
             :root { --gutter: 20px; --row-h: 48px; }
             .c-name { font-size: 18px; }
             .step { height: 56px; }
+            .cur .chk { height: 56px; }
             .bar { padding-left: max(var(--gutter), calc(50vw - 340px)); padding-right: max(var(--gutter), calc(50vw - 340px)); }
         }
         /* ≥ 880 px : Fold ouvert en paysage — liste à gauche, exercice en cours à droite */
@@ -542,7 +546,7 @@
         </header>
 
         <div id="app-menu" class="hidden" role="menu">
-            <div class="st"><i id="menu-dirty" class="d hidden"></i><span id="active-backup-name">Aucun fichier</span><span id="drive-api-dot" class="api" title="API Drive"></span><span>v3.3</span></div>
+            <div class="st"><i id="menu-dirty" class="d hidden"></i><span id="active-backup-name">Aucun fichier</span><span id="drive-api-dot" class="api" title="API Drive"></span><span>v3.4</span></div>
             <button data-action="header-backup"><i class="fa-solid fa-download pointer-events-none" style="color:var(--glow-green)"></i>Sauvegarder (local)</button>
             <button data-action="header-drive-save"><i class="fa-brands fa-google-drive pointer-events-none" style="color:#4285F4"></i>Sauvegarder sur Drive</button>
             <hr>
@@ -905,7 +909,7 @@
                 programmes[prog] = { derniere_seance: last, jours_depuis: Math.round((parseLocalDate(today) - parseLocalDate(last)) / 86400000),
                     exercices_faits: faits, non_executes_volontairement: nonExecutes, non_enregistres: nonEnregistres };
             });
-            return { genere_le: new Date().toLocaleString('fr-FR'), application: 'Fitness Tracker v3.3', programme_en_cours: st.currentProgram || null, programmes };
+            return { genere_le: new Date().toLocaleString('fr-FR'), application: 'Fitness Tracker v3.4', programme_en_cours: st.currentProgram || null, programmes };
         };
         const exportState = () => {
             const out = JSON.parse(JSON.stringify({ _lisez_moi: FORMAT_NOTE, _resume: null, ...state, isDirty: false }));
@@ -1256,11 +1260,12 @@
                 if (k === cur) {
                     const p = (s.poids ?? '').toString().trim(), r = (s.reps ?? '').toString().trim();
                     const numeric = !p || Number.isFinite(parseNum(p));
-                    rows += `<div class="cur" data-set="${k}">
+                    rows += `<div class="cur${ok ? ' ok' : ''}" data-set="${k}">
                         <div class="cur-lbl"><span>Série <b>${k + 1}</b> / ${sets.length} — ${ok ? 'correction' : 'en cours'}</span><span>${prevSets[k] ? 'dernière fois ' + fmtSet(prevSets[k]) : ''}</span></div>
                         <div class="steps">
                             <div class="step"><button data-step="poids" data-d="-1" aria-label="Moins de poids"${numeric ? '' : ' disabled'}>−</button><div class="val" data-action="type-value" data-field="poids"><strong>${esc(fmtVal(p) || '0')}</strong><small>${numeric ? 'kg ±' + fmtNum(WEIGHT_STEP) : 'poids'}</small></div><button data-step="poids" data-d="1" aria-label="Plus de poids"${numeric ? '' : ' disabled'}>+</button></div>
                             <div class="step"><button data-step="reps" data-d="-1" aria-label="Moins de répétitions">−</button><div class="val" data-action="type-value" data-field="reps"><strong>${esc(fmtVal(r) || '0')}</strong><small>reps ±1</small></div><button data-step="reps" data-d="1" aria-label="Plus de répétitions">+</button></div>
+                            <button class="chk" data-action="toggle-done" data-set="${k}" aria-label="${ok ? 'Annuler la validation' : 'Valider la série'}"><i class="${ok ? 'fa-solid fa-check' : 'fa-regular fa-circle'} pointer-events-none"></i></button>
                         </div></div>`;
                 } else {
                     rows += `<div class="set ${ok ? 'ok' : 'sugg'}" data-action="select-set" data-set="${k}">
