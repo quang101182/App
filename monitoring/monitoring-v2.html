@@ -645,7 +645,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.46.0-dk-accueil-v274';
+    const VERSION = 'v2.46.1-dk-accueil-v275';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1619,24 +1619,27 @@
       const LIB = { first_open: 'Installation (1ʳᵉ ouverture)', onb_try_started: 'Essai de dictée lancé', onb_try_succeeded: 'Essai réussi',
         onboarding_completed: 'Accueil terminé', first_dictation: '1ʳᵉ vraie dictée', onb_path_bubble: 'Choix : bulle',
         onb_path_keyboard: 'Choix : clavier', onb_perm1_ok: 'Autorisation 1 sur 2', onb_perm2_ok: 'Autorisation 2 sur 2',
-        onb_rehearsal_ok: 'Répétition réussie' };
+        onb_rehearsal_ok: 'Répétition réussie', 'onb_rehearsal_ok|first_dictation': '1ʳᵉ dictée réussie' };
       const bloc = (key, titre) => {
         const f = fun.funnels[key];
         if (!f || f.error) return `<div class="fb-card"><div class="chart-title">${titre}</div><div class="no-data">⚠ ${safeText((f && f.error) || 'entonnoir absent')}</div></div>`;
         const byStep = {};
         (f.rows || []).forEach(r => { const m = /^(\d+)\.\s/.exec(r.step || ''); if (m) byStep[Number(m[1]) - 1] = r.users || 0; });
         const vals = f.steps.map((_, i) => byStep[i] || 0);
-        const top = vals[0] || 0;
+        // v2.46.1 (23/10) — les % se calculent sur ceux qui ont COMMENCÉ le nouvel accueil (2ᵉ étape), pas sur toutes les
+        // installations : first_open compte aussi les versions d'avant la refonte, qui n'émettent aucune étape (139 vs 1).
+        const base = vals[1] || 0;
         if (!vals.slice(1).some(v => v > 0))
-          return `<div class="fb-card"><div class="chart-title">${titre}</div><div class="no-data">⏳ Pas encore de donnée — mesuré à partir de l’app v2.74.0</div></div>`;
+          return `<div class="fb-card"><div class="chart-title">${titre}</div><div class="no-data">⏳ Pas encore de donnée — le nouvel accueil arrive avec l’app 2.75 en production</div></div>`;
         const lignes = f.steps.map((s, i) => `<div class="step"><div class="step-head"><span>${safeText(LIB[s] || s)}</span>`
-          + `<b>${dkNum(vals[i])}${i ? ` · ${dkPct(vals[i], top)} %` : ''}</b></div>`
-          + `<div class="step-bar"><i style="width:${top > 0 ? Math.max(2, vals[i] / top * 100) : 2}%"></i></div></div>`).join('');
-        return `<div class="fb-card"><div class="chart-title">${titre}</div>${lignes}</div>`;
+          + `<b>${dkNum(vals[i])}${i >= 2 ? ` · ${dkPct(vals[i], base)} %` : ''}</b></div>`
+          + `<div class="step-bar"><i style="width:${i === 0 ? 100 : (base > 0 ? Math.max(2, Math.min(100, vals[i] / base * 100)) : 2)}%"></i></div></div>`).join('');
+        const petit = base < 10 ? `<div class="lg-row" style="color:#f59e0b;font-size:12px">⚠ ${dkNum(base)} personne(s) seulement : échantillon de testeurs, pas encore un taux (2.75 pas encore en production)</div>` : '';
+        return `<div class="fb-card"><div class="chart-title">${titre}</div>${lignes}${petit}</div>`;
       };
       return `<div class="fb-grid">${bloc('accueil_essai', '🎙 Essai de dictée')}${bloc('accueil_bulle', '🫧 Chemin bulle')}`
         + `${bloc('accueil_clavier', '⌨ Chemin clavier')}</div>`
-        + `<div class="lg-row" style="opacity:.6;font-size:12px">${fun.days || 28} jours · utilisateurs par étape, dans l’ordre · % = part des installations · données J-1 (cache 1 h)</div>`;
+        + `<div class="lg-row" style="opacity:.6;font-size:12px">${fun.days || 28} jours · utilisateurs par étape, dans l’ordre · % = part de ceux qui ont commencé le nouvel accueil (installations : toutes versions, pour mémoire) · données J-1 (cache 1 h)</div>`;
     }
 
     // v2.46.0 — Usage des fonctions (événement feature_used, app v2.74.0). Source : /admin/firebase-stats
@@ -2842,7 +2845,7 @@
         + `<section class="section">${Panel('dk-play', '📥 Play Store — adoption & activité', psHtml, true)}</section>`
         + `<section class="section">${Panel('dk-activity', '📈 Activité', activity, true)}</section>`
         + `<section class="section">${Panel('dk-source', '🫧⌨ Bulle ou clavier ?', renderDkSourceSplit(src), true)}</section>`
-        + `<section class="section">${Panel('dk-accueil', '🚪 Nouvel accueil (v2.74)', renderDkAccueil(fun), true)}</section>`
+        + `<section class="section">${Panel('dk-accueil', '🚪 Nouvel accueil (app 2.75)', renderDkAccueil(fun), true)}</section>`
         + `<section class="section">${Panel('dk-usage', '🧰 Usage des fonctions', renderDkUsage(fb), false)}</section>`
         + `<section class="section">${Panel('dk-perf', '⚡ Performance API', perf, false)}</section>`
         + `<section class="section">${Panel('dk-split', '🌍 Répartition', donuts, false)}</section>`
