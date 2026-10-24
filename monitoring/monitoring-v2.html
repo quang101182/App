@@ -645,7 +645,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.46.3-dk-abonnes-google';
+    const VERSION = 'v2.46.4-dk-fantomes-masques';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1897,7 +1897,10 @@
     // surtout lisible en mobile. N'affecte AUCUN chiffre (total, KPI, filtres) — seulement le nb de pages.
     const DK_PER_PAGE = 30;
     const LS_TIER_FILTERS = 'monitoring_tier_filters';   // même clé que la prod → filtres hérités
-    const dkDevState = { page: 0, search: '', filters: dkLoadTierFilters(), all: [], filtered: [] };
+    // v2.46.4 (24/10) : fantômes (free, 0 requête depuis l'enregistrement) MASQUÉS par défaut — affichage seulement. Les
+    // supprimer côté passerelle n'est PAS sans risque : la suppression efface aussi le jeton, et l'app ne gère aucun 401
+    // (un vrai abandon qui reviendrait ne pourrait plus dicter). Cf dictokey/scripts/delete_phantoms_v2.py.
+    const dkDevState = { page: 0, search: '', filters: dkLoadTierFilters(), showPhantoms: false, all: [], filtered: [] };
     function dkLoadTierFilters() {
       try {
         const stored = localStorage.getItem(LS_TIER_FILTERS);
@@ -1959,6 +1962,7 @@
     function dkApplyDeviceFilters(resetPage) {
       const q = (dkDevState.search || '').toLowerCase();
       dkDevState.filtered = (dkDevState.all || []).filter(d => {
+        if (!dkDevState.showPhantoms && dkIsPhantom(d)) return false;
         const cat = dkDeviceCategory(d);
         if (!dkDevState.filters[cat]) return false;
         if (!q) return true;
@@ -2878,9 +2882,11 @@
 
       // Compteurs des pills = sur allDevices (NON filtré), comme la prod.
       const counts = { pro: 0, premium: 0, free: 0 };
-      (dkDevState.all || []).forEach(d => { counts[dkDeviceCategory(d)]++; });
+      (dkDevState.all || []).forEach(d => { if (dkDevState.showPhantoms || !dkIsPhantom(d)) counts[dkDeviceCategory(d)]++; });
+      const nPhantoms = (dkDevState.all || []).filter(dkIsPhantom).length;
       const pills = ['pro', 'premium', 'free'].map(t =>
-        `<button class="tier-pill${dkDevState.filters[t] ? ' active' : ''}" type="button" data-tier="${t}">${t} <b>${counts[t]}</b></button>`).join('');
+        `<button class="tier-pill${dkDevState.filters[t] ? ' active' : ''}" type="button" data-tier="${t}">${t} <b>${counts[t]}</b></button>`).join('')
+        + (nPhantoms ? `<button class="tier-pill${dkDevState.showPhantoms ? ' active' : ''}" type="button" data-phantoms="1" title="Appareils jamais utilisés depuis leur enregistrement (robots de test Google ou abandons) — masqués par défaut">fantômes <b>${nPhantoms}</b></button>` : '');
 
       const start = dkDevState.page * DK_PER_PAGE;
       const end = Math.min(start + DK_PER_PAGE, dkDevState.filtered.length);
@@ -3597,6 +3603,13 @@
         localStorage.setItem(cfg.tokenKey, value);
         state.error.delete(cfg.key);
         refresh(cfg.key);
+        return;
+      }
+      const phantomPill = event.target.closest('[data-phantoms]');
+      if (phantomPill) {
+        dkDevState.showPhantoms = !dkDevState.showPhantoms;
+        dkApplyDeviceFilters(true);
+        dkRefreshDevicesPanel();
         return;
       }
       const tierPill = event.target.closest('[data-tier]');
