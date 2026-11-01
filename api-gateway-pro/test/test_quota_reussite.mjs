@@ -83,7 +83,7 @@ async function appeler(worker, env, chemin, { methode = 'POST', entetes = {} } =
   inscriptionsAuFournisseur = -1;
   const req = new Request(`https://gw.banc.invalid${chemin}?to=fr`, {
     method: methode,
-    headers: { 'X-Pro-Key': CLE, 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.9', ...entetes },
+    headers: { 'X-Pro-Key': CLE, 'Content-Type': 'application/json', 'Content-Length': '1000', 'CF-Connecting-IP': '203.0.113.9', ...entetes },
     body: methode === 'GET' ? undefined : '{}',
   });
   let statut;
@@ -197,6 +197,7 @@ try {
   const fichier = join(dossier2, 'index_attendre_puis_compter.mjs');
   writeFileSync(fichier, sabote);
   writeFileSync(join(dossier2, 'stt_moteur.js'), readFileSync(join(ICI, '../src/stt_moteur.js')));
+  for (const m of ['stt_cout.js', 'stt_garde.js']) writeFileSync(join(dossier2, m), readFileSync(join(ICI, '../src/' + m)));
   const mute =(await import(pathToFileURL(fichier).href)).default;
   const rouges = (await batterie(mute)).filter(([, ok]) => !ok).map(([nom]) => nom);
   const nom = 'client qui coupe : décompte confié à waitUntil AVANT le fournisseur';

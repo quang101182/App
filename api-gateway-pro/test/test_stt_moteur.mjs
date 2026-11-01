@@ -78,6 +78,7 @@ async function batterie(worker) {
     const h = { 'CF-Connecting-IP': '203.0.113.9', ...headers };
     if (pro) h['X-Pro-Key'] = CLE;
     if (auth) h.Authorization = 'Bearer ' + auth;
+    if (body) h['Content-Length'] = String(body.length ?? body.byteLength ?? body.size ?? 1000);   // v1.30.0 : obligatoire sur les routes audio
     const r = await worker.fetch(new Request(GW + path, { method, headers: h, body }), env, ctx);
     const texte = await r.text();
     while (attente.length) await Promise.allSettled(attente.splice(0));
@@ -168,7 +169,7 @@ async function mutation(titre, fichierSrc, cible, remplacement, attendu) {
   let dossier;
   try {
     dossier = mkdtempSync(join(tmpdir(), 'banc-pro-stt-'));
-    for (const f of ['index.js', 'stt_moteur.js']) copyFileSync(join(SRC, f), join(dossier, f));
+    for (const f of ['index.js', 'stt_moteur.js', 'stt_cout.js', 'stt_garde.js']) copyFileSync(join(SRC, f), join(dossier, f));
     const src = readFileSync(join(SRC, fichierSrc), 'utf8');
     if (!src.includes(cible)) throw new Error('cible introuvable');
     writeFileSync(join(dossier, fichierSrc), src.replace(cible, remplacement));

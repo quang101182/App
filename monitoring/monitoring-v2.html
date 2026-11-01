@@ -645,7 +645,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.46.4-dk-fantomes-masques';
+    const VERSION = 'v2.47.0-coupe-circuit';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -2363,6 +2363,25 @@
       { plat: 'pc', nom: 'PC', base: DKPC_GATEWAY, app: 'dkpc' },
     ];
     const STT_LABEL = { mai2: 'MAI-Transcribe-2', groq: 'Groq Whisper' };
+    // v2.47.0 : coupe-circuit de volume (stt_garde.js) : état et reprise manuelle, passerelle par passerelle.
+    function gardeHtml(g, url, jeton) {
+      if (!g) return '';
+      const vol = `volume du jour ${g.heuresDuJour} h · coupe-circuit à ${g.seuilHeures} h`;
+      if (!g.coupe) return `<div class="stt-meta">${safeText(vol)}</div>`;
+      return `<div class="stt-meta stt-err">🛑 Transcription arrêtée par le coupe-circuit le ${sttHeure(g.coupe.at)} (${safeText(String(g.coupe.heures))} h, seuil ${safeText(String(g.coupe.seuilHeures))} h)</div>`
+        + `<button type="button" class="stt-btn" data-garde-url="${safeText(url)}" data-garde-jeton="${safeText(jeton)}">Reprendre la transcription</button>`;
+    }
+    document.addEventListener('click', async (ev) => {
+      const b = ev.target.closest && ev.target.closest('[data-garde-url]');
+      if (!b) return;
+      if (!confirm('Reprendre la transcription ?\n\nVérifie d\'abord pourquoi le volume a explosé : la reprise rouvre le service à tous les utilisateurs.')) return;
+      b.disabled = true;
+      try {
+        const r = await fetch(b.dataset.gardeUrl, { method: 'POST', headers: { Authorization: `Bearer ${getToken(getApp(b.dataset.gardeJeton))}` } });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        location.reload();
+      } catch (e) { b.disabled = false; alert(`Reprise impossible : ${e.message || e}`); }
+    });
     const sttHeure = iso => { try { return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch { return iso; } };
 
     function sttPlaceholder() {
@@ -2412,7 +2431,7 @@
         return `<div class="stt-row"><span class="stt-plat">${safeText(e.nom)}</span>`
           + `<span class="stt-pill ${s.engine === 'mai2' ? 'p-mai' : 'p-groq'}">${safeText(STT_LABEL[s.engine])}</span>`
           + `<button type="button" class="stt-btn" data-stt-plat="${e.plat}" data-stt-switch="${autre}">Passer sur ${safeText(STT_LABEL[autre])}</button>`
-          + `<span class="stt-meta">${safeText(meta.join(' · '))}</span>${err}</div>`;
+          + `<span class="stt-meta">${safeText(meta.join(' · '))}</span>${err}${gardeHtml(s.garde, `${e.base}/admin/stt-engine?reprendre=1`, e.app)}</div>`;
       }).join('');
       return `<div id="dk-stt-banner" class="stt-banner ${cls}"><div class="stt-head"><span class="stt-title">DictoKey · dictée (Android + PC)</span><span class="stt-main">${safeText(titre)}</span></div>`
         + `<div class="stt-rows">${lignes}</div>`
@@ -2675,7 +2694,7 @@
           + `<td>${actif ? '<span class="st-badge-actif">● ACTIF</span>' : `<button type="button" class="stt-btn" data-st-src="${id}" data-st-switch="${safeText(m.id)}">Choisir</button>`}</td></tr>`;
       }).join('');
       return `<div id="${src.banniere}" class="stt-banner ${cls}"><div class="stt-head"><span class="stt-title">${safeText(src.titre)}</span><span class="stt-main">${safeText(titre)}</span></div>`
-        + `<div class="stt-meta">${safeText(meta.join(' · '))}</div>${err}`
+        + `<div class="stt-meta">${safeText(meta.join(' · '))}</div>${err}${gardeHtml(s.garde, `${src.base}/admin/stt-engine?app=${src.app}&reprendre=1`, src.jeton)}`
         + `<div class="st-wrap"><table class="st-table"><thead><tr><th>Moteur</th><th>Qualité</th><th>${safeText(src.colTemps || 'Temps (6 min)')}</th><th>Prix</th><th></th></tr></thead><tbody>${lignes}</tbody></table></div>`
         + `<div class="stt-foot">${safeText(src.mesure || 'Classement mesuré le 03/10/2026')} (prix MAI : offre de lancement jusqu'au 31/12/2026). Lu en direct · aucun secours automatique : ${src.panne}, une alerte Telegram (1 par heure au plus) renvoie ici. `
         + `${src.effet}</div></div>`;

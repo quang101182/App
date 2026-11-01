@@ -38,9 +38,11 @@
 
 import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMoteur, etatMoteur, basculer, noterPanne, alerterPanne, cibleMai }
   from './stt_moteur.js';
+import { refusTaille, refusCoupe, compterVolume, reprendre, etatGarde } from './stt_garde.js';   // v1.30.0
 import { compterCout, moteurGroq, dureeWav, lireCouts } from './stt_cout.js';   // v1.29.0 (P8) : cout des transcriptions
 
-const VERSION = '1.29.0';   // 1.29.0 (06/10/2026) : cout des transcriptions par moteur (P8) -- un evenement KV par transcription MAI ou Groq (aucune perte en parallele), GET /admin/stt-cout lu par le dashboard (onglet Moteurs). Module src/stt_cout.js (copie identique de la gateway principale). Aucun changement de reponse pour l'app. 1.28.0 (05/10/2026) : /config liste les NOMS de cles (1 list au lieu de 5 lectures de valeurs). 1.27.0 (05/10/2026) : alerte panne MAI seulement a la 2e panne en < 10 min (l'app reessaie 3 fois depuis v1.4.1 ; un 520 isole alertait pour rien). 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
+const VERSION = '1.30.0';   // 1.30.0 (01/11/2026) : garde-fous stt_garde.js (taille maximale cote serveur, coupe-circuit, reprise par le dashboard).
+// 1.29.0 (06/10/2026) : cout des transcriptions par moteur (P8) -- un evenement KV par transcription MAI ou Groq (aucune perte en parallele), GET /admin/stt-cout lu par le dashboard (onglet Moteurs). Module src/stt_cout.js (copie identique de la gateway principale). Aucun changement de reponse pour l'app. 1.28.0 (05/10/2026) : /config liste les NOMS de cles (1 list au lieu de 5 lectures de valeurs). 1.27.0 (05/10/2026) : alerte panne MAI seulement a la 2e panne en < 10 min (l'app reessaie 3 fois depuis v1.4.1 ; un 520 isole alertait pour rien). 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
 // v1.25.3 (2026-10-01) - API Polar : version EPINGLEE (en-tete Polar-Version).
 //   Polar versionne son API par trimestre depuis le 01/10/2026 ; sans en-tete, un appel suit la
 //   version courante et son contrat change sous nos pieds a chaque release. 2026-10 verifiee le
@@ -363,7 +365,17 @@ async function telegramPanne(env, texte) {
   } catch (e) { return { sent: false, reason: String(e).slice(0, 120) }; }
 }
 
+// v1.30.0 : ces deux routes relaient le corps sans le lire : la taille se juge sur l'en-tete, obligatoire.
+async function gardeAudio(request, env) {
+  const cl = request.headers.get('Content-Length');
+  if (!(Number(cl) > 0)) return err('Content-Length requis', 411);
+  const r = refusTaille(cl) || await refusCoupe(env.PRO_KV);
+  return r ? json(r.corps, r.statut) : null;
+}
+
 async function proxyMai(request, env, ctx) {
+  const garde = await gardeAudio(request, env);
+  if (garde) return garde;
   let cle = null;
   for (const nom of MAI_CLES) { cle = await getApiKey(nom, env); if (cle) break; }
   if (!cle) return err('AZURE_SPEECH_KEY not configured', 503);
@@ -392,6 +404,7 @@ async function proxyMai(request, env, ctx) {
     ctx.waitUntil(copie.json().then((j) => Promise.all([
       compterSecondes(env.PRO_KV, app, j && j.durationMilliseconds),
       compterCout(env.PRO_KV, app, 'mai2', (Number(j && j.durationMilliseconds) || 0) / 1000),
+      compterVolume(env.PRO_KV, (Number(j && j.durationMilliseconds) || 0) / 1000, (t) => telegramPanne(env, t)),
     ])).catch(() => {}));
   }
   return new Response(resp.body, {
@@ -401,6 +414,8 @@ async function proxyMai(request, env, ctx) {
 }
 
 async function proxyGroq(request, env, ctx) {
+  const garde = await gardeAudio(request, env);
+  if (garde) return garde;
   const key = await getApiKey('GROQ_KEY', env);
   if (!key) return err('Groq API key not configured', 503);
   const ct = request.headers.get('Content-Type') || '';
@@ -428,6 +443,7 @@ async function compterGroq(env, copieReq, copieResp) {
   let sec = Number(j && j.duration) || 0;
   if (!sec && fichier && typeof fichier.arrayBuffer === 'function') sec = dureeWav(await fichier.arrayBuffer());
   await compterCout(env.PRO_KV, 'swp', moteurGroq(modele), sec);
+  await compterVolume(env.PRO_KV, sec, (t) => telegramPanne(env, t));
 }
 
 async function proxyAssemblyAI(request, env) {
@@ -1404,7 +1420,8 @@ export default {
       if (path === '/admin/stt-engine' && (method === 'GET' || method === 'POST')) {
         const app = appDemandee(url);
         if (!app) return json({ error: 'app inconnue', apps: Object.keys(APPS_STT) }, 400);
-        if (method === 'GET') return json({ ok: true, ...(await etatMoteur(env.PRO_KV, app)) });
+        if (method === 'GET') return json({ ok: true, ...(await etatMoteur(env.PRO_KV, app)), garde: await etatGarde(env.PRO_KV) });
+        if (url.searchParams.get('reprendre') === '1') return json(await reprendre(env.PRO_KV));   // v1.30.0
         let corps = null; try { corps = await request.json(); } catch { /* 400 plus bas */ }
         const r = await basculer(env.PRO_KV, app, corps);
         return json(r.body, r.status);
