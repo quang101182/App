@@ -39,9 +39,10 @@
 import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMoteur, etatMoteur, basculer, noterPanne, alerterPanne, cibleMai }
   from './stt_moteur.js';
 import { refusTaille, refusCoupe, compterVolume, reprendre, etatGarde } from './stt_garde.js';   // v1.30.0
+import { lireHeures, refusHeures, ajouterHeures, etatAffiche, signalerRefus } from './plafond_heures.js';   // v1.31.0
 import { compterCout, moteurGroq, dureeWav, lireCouts } from './stt_cout.js';   // v1.29.0 (P8) : cout des transcriptions
 
-const VERSION = '1.30.1';   // 1.30.1 (01/11/2026) : stt_garde 1.1.0, pre-alerte Telegram a 80 % du coupe-circuit. 1.30.0 (01/11/2026) : garde-fous stt_garde.js (taille maximale cote serveur, coupe-circuit, reprise par le dashboard).
+const VERSION = '1.31.0';   // 1.31.0 (01/11/2026) : plafond mensuel en heures (plafond_heures.js, Pro 15 h, essai 2 h), compteur actif, refus eteint tant que cfg:plafond_mensuel n'est pas pose. 1.30.1 (01/11/2026) : stt_garde 1.1.0, pre-alerte Telegram a 80 % du coupe-circuit. 1.30.0 (01/11/2026) : garde-fous stt_garde.js (taille maximale cote serveur, coupe-circuit, reprise par le dashboard).
 // 1.29.0 (06/10/2026) : cout des transcriptions par moteur (P8) -- un evenement KV par transcription MAI ou Groq (aucune perte en parallele), GET /admin/stt-cout lu par le dashboard (onglet Moteurs). Module src/stt_cout.js (copie identique de la gateway principale). Aucun changement de reponse pour l'app. 1.28.0 (05/10/2026) : /config liste les NOMS de cles (1 list au lieu de 5 lectures de valeurs). 1.27.0 (05/10/2026) : alerte panne MAI seulement a la 2e panne en < 10 min (l'app reessaie 3 fois depuis v1.4.1 ; un 520 isole alertait pour rien). 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
 // v1.25.3 (2026-10-01) - API Polar : version EPINGLEE (en-tete Polar-Version).
 //   Polar versionne son API par trimestre depuis le 01/10/2026 ; sans en-tete, un appel suit la
@@ -373,7 +374,7 @@ async function gardeAudio(request, env) {
   return r ? json(r.corps, r.statut) : null;
 }
 
-async function proxyMai(request, env, ctx) {
+async function proxyMai(request, env, ctx, proKey) {
   const garde = await gardeAudio(request, env);
   if (garde) return garde;
   let cle = null;
@@ -405,6 +406,7 @@ async function proxyMai(request, env, ctx) {
       compterSecondes(env.PRO_KV, app, j && j.durationMilliseconds),
       compterCout(env.PRO_KV, app, 'mai2', (Number(j && j.durationMilliseconds) || 0) / 1000),
       compterVolume(env.PRO_KV, (Number(j && j.durationMilliseconds) || 0) / 1000, (t) => telegramPanne(env, t)),
+      ajouterHeures(env.PRO_KV, proKey, (Number(j && j.durationMilliseconds) || 0) / 1000),   // v1.31.0
     ])).catch(() => {}));
   }
   return new Response(resp.body, {
@@ -413,7 +415,7 @@ async function proxyMai(request, env, ctx) {
   });
 }
 
-async function proxyGroq(request, env, ctx) {
+async function proxyGroq(request, env, ctx, proKey) {
   const garde = await gardeAudio(request, env);
   if (garde) return garde;
   const key = await getApiKey('GROQ_KEY', env);
@@ -427,7 +429,7 @@ async function proxyGroq(request, env, ctx) {
     headers,
     body: request.body,
   });
-  if (resp.ok && ctx) ctx.waitUntil(compterGroq(env, copieReq, resp.clone()).catch(() => {}));
+  if (resp.ok && ctx) ctx.waitUntil(compterGroq(env, copieReq, resp.clone(), proKey).catch(() => {}));
   else if (copieReq.body) copieReq.body.cancel().catch(() => {});   // copie inutile : liberee tout de suite
   return new Response(resp.body, {
     status: resp.status,
@@ -436,7 +438,7 @@ async function proxyGroq(request, env, ctx) {
 }
 
 // v1.29.0 (P8) - duree lue dans la reponse (verbose_json, ce que demande l'app), sinon dans l'en-tete du WAV
-async function compterGroq(env, copieReq, copieResp) {
+async function compterGroq(env, copieReq, copieResp, proKey) {
   let j = null, modele = '', fichier = null;
   try { j = await copieResp.json(); } catch { /* format texte */ }
   try { const fd = await copieReq.formData(); modele = String(fd.get('model') || ''); fichier = fd.get('file'); } catch { /* illisible */ }
@@ -444,6 +446,7 @@ async function compterGroq(env, copieReq, copieResp) {
   if (!sec && fichier && typeof fichier.arrayBuffer === 'function') sec = dureeWav(await fichier.arrayBuffer());
   await compterCout(env.PRO_KV, 'swp', moteurGroq(modele), sec);
   await compterVolume(env.PRO_KV, sec, (t) => telegramPanne(env, t));
+  await ajouterHeures(env.PRO_KV, proKey, sec);   // v1.31.0
 }
 
 async function proxyAssemblyAI(request, env) {
@@ -1408,7 +1411,7 @@ export default {
       const mk = monthKey();
       const monthly = (proData.monthlyUsage && proData.monthlyUsage[mk]) || { transcriptions: 0, translations: 0 };
       const limits = PLAN_LIMITS[proData.plan] || PLAN_LIMITS.pro;
-      return json({ apis, plan: proData.plan, monthlyUsage: monthly, limits });
+      return json({ apis, plan: proData.plan, monthlyUsage: monthly, limits, hours: etatAffiche(proData.plan, await lireHeures(env.PRO_KV, proKey)) });
     }
 
     // ── Admin routes ──────────────────────────────────────────────────────
@@ -1835,6 +1838,17 @@ export default {
       const usageType = (path === '/api/groq' || path === '/api/mai' || path === '/api/assemblyai' || path.startsWith('/api/assemblyai/'))
         ? 'transcription' : 'translation';
 
+      // v1.31.0 : plafond en heures, avant tout appel au fournisseur (l'upload et le suivi AssemblyAI restent permis).
+      const creeAudio = path === '/api/mai' || path === '/api/groq' || ((path === '/api/assemblyai' || path.startsWith('/api/assemblyai/'))
+        && method === 'POST' && !safeApiPath(request.headers.get('X-Api-Path'), '/v2/transcript').startsWith('/v2/upload'));
+      if (creeAudio) {
+        const refus = refusHeures(proData.plan, await lireHeures(env.PRO_KV, proKey));
+        if (refus) {
+          ctx.waitUntil(signalerRefus(env.PRO_KV, proKey, (t) => telegramPanne(env, t)));
+          return json(refus, 402);
+        }
+      }
+
       // Check monthly usage limit
       const limitCheck = checkUsageLimit(proData, usageType);
       if (limitCheck.blocked) {
@@ -1860,12 +1874,12 @@ export default {
 
       // MAI proxy (v1.26.0) - meme quota et meme decompte que Groq : une tranche transcrite = une transcription
       if (path === '/api/mai' && method === 'POST') {
-        return relayerEtCompter(proxyMai(request, env, ctx), proKey, 'transcription', env, ctx);
+        return relayerEtCompter(proxyMai(request, env, ctx, proKey), proKey, 'transcription', env, ctx);
       }
 
       // Groq proxy
       if (path === '/api/groq') {
-        return relayerEtCompter(proxyGroq(request, env, ctx), proKey, 'transcription', env, ctx);
+        return relayerEtCompter(proxyGroq(request, env, ctx, proKey), proKey, 'transcription', env, ctx);
       }
 
       // AssemblyAI proxy - seule la CREATION d'une transcription compte (ni l'upload, ni le suivi GET).

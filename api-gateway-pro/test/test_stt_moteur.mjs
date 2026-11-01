@@ -169,7 +169,7 @@ async function mutation(titre, fichierSrc, cible, remplacement, attendu) {
   let dossier;
   try {
     dossier = mkdtempSync(join(tmpdir(), 'banc-pro-stt-'));
-    for (const f of ['index.js', 'stt_moteur.js', 'stt_cout.js', 'stt_garde.js']) copyFileSync(join(SRC, f), join(dossier, f));
+    for (const f of ['index.js', 'stt_moteur.js', 'stt_cout.js', 'stt_garde.js', 'plafond_heures.js']) copyFileSync(join(SRC, f), join(dossier, f));
     const src = readFileSync(join(SRC, fichierSrc), 'utf8');
     if (!src.includes(cible)) throw new Error('cible introuvable');
     writeFileSync(join(dossier, fichierSrc), src.replace(cible, remplacement));
@@ -187,7 +187,7 @@ await mutation('defaut force a mai2 (le deploiement basculerait les clients paya
 await mutation('/api/mai soumis au quota des TRADUCTIONS', 'index.js',
   "path === '/api/groq' || path === '/api/mai' ||", "path === '/api/groq' ||", 'plafond de transcriptions atteint -> 429, Azure jamais appele');
 await mutation('/api/mai sans decompte sur succes', 'index.js',
-  "return relayerEtCompter(proxyMai(request, env, ctx), proKey, 'transcription', env, ctx);", 'return proxyMai(request, env, ctx);',
+  "return relayerEtCompter(proxyMai(request, env, ctx, proKey), proKey, 'transcription', env, ctx);", 'return proxyMai(request, env, ctx, proKey);',
   'succes = 1 transcription comptee (comme Groq)');
 await mutation('alerte des la 1re panne (sans recidive)', 'index.js',
   'if (!(await noterPanne(env.PRO_KV, app, status, message))) return;', 'await noterPanne(env.PRO_KV, app, status, message);',

@@ -197,7 +197,7 @@ try {
   const fichier = join(dossier2, 'index_attendre_puis_compter.mjs');
   writeFileSync(fichier, sabote);
   writeFileSync(join(dossier2, 'stt_moteur.js'), readFileSync(join(ICI, '../src/stt_moteur.js')));
-  for (const m of ['stt_cout.js', 'stt_garde.js']) writeFileSync(join(dossier2, m), readFileSync(join(ICI, '../src/' + m)));
+  for (const m of ['stt_cout.js', 'stt_garde.js', 'plafond_heures.js']) writeFileSync(join(dossier2, m), readFileSync(join(ICI, '../src/' + m)));
   const mute =(await import(pathToFileURL(fichier).href)).default;
   const rouges = (await batterie(mute)).filter(([, ok]) => !ok).map(([nom]) => nom);
   const nom = 'client qui coupe : décompte confié à waitUntil AVANT le fournisseur';
