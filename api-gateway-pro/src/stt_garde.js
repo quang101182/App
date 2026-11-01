@@ -1,4 +1,4 @@
-// stt_garde.js v1.0.0 (01/11/2026) : garde-fous de coût de la transcription.
+// stt_garde.js v1.1.0 (01/11/2026) : garde-fous de coût de la transcription.
 // Copie IDENTIQUE dans 3 passerelles : dictokey/gateway, dictokey-pc/gateway, App/api-gateway-pro.
 // Toute modification se reporte dans les 3 (test_stt_garde.mjs compare les copies).
 //
@@ -6,6 +6,7 @@
 // 2. Coupe-circuit : volume du jour anormal -> transcription arrêtée, alerte Telegram, reprise manuelle.
 //    Seuil = le plus grand de 20 h ou 5 fois la moyenne des 7 jours précédents, donc il suit la croissance.
 //    Aucune bascule silencieuse vers un autre moteur (règle de Quang).
+//    v1.1.0 : pré-alerte Telegram à 80 % du seuil, une fois par jour : Quang est prévenu avant la coupure.
 // ⚠️ Limite connue : une clé Azure volée et utilisée en direct ne passe pas par ici.
 // ⚠️ KV n'est pas atomique : le compteur peut sous-compter sous forte concurrence. C'est un garde-fou, pas une facture.
 
@@ -13,6 +14,7 @@ export const TAILLE_MAX_OCTETS = 26 * 1024 * 1024;   // 25 Mo côté apps + enve
 export const SEUIL_MIN_SEC = 20 * 3600;
 export const FACTEUR = 5;
 export const JOURS = 7;
+export const PREALERTE_POURCENT = 80;
 const TTL_COMPTEUR = 10 * 86400;
 const CLE_COUPE = 'cc:coupe';
 
@@ -46,6 +48,15 @@ export async function seuilDuJour(kv, maintenant = Date.now()) {
   return seuil;
 }
 
+/** Une fois par jour, dès 80 % du seuil. Le drapeau n'est posé qu'après l'envoi : une alerte ratée se retente. */
+async function preAlerter(kv, j, total, base, seuil, alerter) {
+  if (!alerter || (total - base) * 100 < seuil * PREALERTE_POURCENT || await kv.get(CLE_COUPE)) return;
+  const cle = `cc:prealerte:${j}`;
+  if (await kv.get(cle)) return;
+  await alerter(`⚠️ Transcription : ${Math.round((total - base) / 360) / 10} h aujourd'hui, le coupe-circuit se déclenche à ${Math.round(seuil / 360) / 10} h. Rien n'est coupé pour l'instant.`);
+  await kv.put(cle, '1', { expirationTtl: 2 * 86400 });
+}
+
 /** Après une transcription réussie : ajoute la durée, déclenche la coupure si le seuil est franchi.
  *  `alerter(texte)` envoie l'alerte. Ne jette jamais : un compteur raté ne doit pas casser une dictée. */
 export async function compterVolume(kv, sec, alerter, maintenant = Date.now()) {
@@ -57,7 +68,11 @@ export async function compterVolume(kv, sec, alerter, maintenant = Date.now()) {
     await kv.put(`cc:jour:${j}`, String(Math.round(total)), { expirationTtl: TTL_COMPTEUR });
     const base = entier(await kv.get(`cc:repris:${j}`));
     const seuil = await seuilDuJour(kv, maintenant);
-    if (total - base < seuil || await kv.get(CLE_COUPE)) return { coupe: false, total, seuil };
+    if (total - base < seuil) {
+      await preAlerter(kv, j, total, base, seuil, alerter);
+      return { coupe: false, total, seuil };
+    }
+    if (await kv.get(CLE_COUPE)) return { coupe: false, total, seuil };
     await kv.put(CLE_COUPE, JSON.stringify({ at: new Date(maintenant).toISOString(), heures: Math.round(total / 360) / 10, seuilHeures: Math.round(seuil / 360) / 10 }));
     if (alerter) await alerter(`🛑 Coupe-circuit transcription : ${Math.round(total / 360) / 10} h aujourd'hui, seuil ${Math.round(seuil / 360) / 10} h. Service arrêté jusqu'à ta reprise depuis le tableau de bord (onglet Moteurs).`);
     return { coupe: true, total, seuil };
@@ -71,6 +86,7 @@ export async function compterVolume(kv, sec, alerter, maintenant = Date.now()) {
 export async function reprendre(kv, maintenant = Date.now()) {
   const j = jour(0, maintenant);
   await kv.put(`cc:repris:${j}`, String(entier(await kv.get(`cc:jour:${j}`))), { expirationTtl: TTL_COMPTEUR });
+  await kv.delete(`cc:prealerte:${j}`);
   await kv.delete(CLE_COUPE);
   return { ok: true, repris: true };
 }

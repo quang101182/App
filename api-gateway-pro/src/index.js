@@ -41,7 +41,7 @@ import { APPS_STT, MAI_CLES, estPanneMai, compterSecondes, appDemandee, lireMote
 import { refusTaille, refusCoupe, compterVolume, reprendre, etatGarde } from './stt_garde.js';   // v1.30.0
 import { compterCout, moteurGroq, dureeWav, lireCouts } from './stt_cout.js';   // v1.29.0 (P8) : cout des transcriptions
 
-const VERSION = '1.30.0';   // 1.30.0 (01/11/2026) : garde-fous stt_garde.js (taille maximale cote serveur, coupe-circuit, reprise par le dashboard).
+const VERSION = '1.30.1';   // 1.30.1 (01/11/2026) : stt_garde 1.1.0, pre-alerte Telegram a 80 % du coupe-circuit. 1.30.0 (01/11/2026) : garde-fous stt_garde.js (taille maximale cote serveur, coupe-circuit, reprise par le dashboard).
 // 1.29.0 (06/10/2026) : cout des transcriptions par moteur (P8) -- un evenement KV par transcription MAI ou Groq (aucune perte en parallele), GET /admin/stt-cout lu par le dashboard (onglet Moteurs). Module src/stt_cout.js (copie identique de la gateway principale). Aucun changement de reponse pour l'app. 1.28.0 (05/10/2026) : /config liste les NOMS de cles (1 list au lieu de 5 lectures de valeurs). 1.27.0 (05/10/2026) : alerte panne MAI seulement a la 2e panne en < 10 min (l'app reessaie 3 fois depuis v1.4.1 ; un 520 isole alertait pour rien). 1.26.0 (03/10/2026) : MAI-Transcribe-2 pour SubWhisper Pro -- POST /api/mai (quota transcription, decompte sur succes), GET /api/stt-engine?app=swp, GET|POST /admin/stt-engine?app=swp (interrupteur au dashboard, defaut groq), alerte Telegram <= 1/h sur VRAIE panne, AUCUNE bascule auto. Module src/stt_moteur.js (copie de la gateway principale).
 // v1.25.3 (2026-10-01) - API Polar : version EPINGLEE (en-tete Polar-Version).
 //   Polar versionne son API par trimestre depuis le 01/10/2026 ; sans en-tete, un appel suit la
