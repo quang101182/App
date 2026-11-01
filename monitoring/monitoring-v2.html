@@ -645,7 +645,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.47.0-coupe-circuit';
+    const VERSION = 'v2.48.0-protection-azure';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -2650,6 +2650,48 @@
         + err + tuiles + table + `<div class="stt-foot">${notes.map(n => safeText(n)).join('<br>')}</div></div>`;
     }
 
+    // v2.48.0 : protection Azure. Une clé volée ne passe pas par nos passerelles : Azure surveille lui-même son volume,
+    // prévient à un 1er seuil et bloque la ressource au 2nd. Ce bloc montre l'état et rouvre d'un bouton.
+    function azPlaceholder() {
+      setTimeout(azLoad, 0);
+      return `<div id="az-banner" class="stt-banner"><div class="stt-head"><span class="stt-title">Protection Azure</span><span class="stt-main">lecture en direct…</span></div></div>`;
+    }
+    async function azLoad() {
+      const el = document.getElementById('az-banner');
+      if (!el) return;
+      try {
+        const r = await fetch(`${DK_GATEWAY}/admin/azure-etat`, { headers: { Authorization: `Bearer ${getToken(getApp('dk'))}` } });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        el.outerHTML = azRender((await r.json()).ressources || []);
+      } catch (e) {
+        el.outerHTML = `<div id="az-banner" class="stt-banner stt-panne"><div class="stt-head"><span class="stt-title">Protection Azure</span><span class="stt-main">État illisible</span></div><div class="stt-meta">${safeText(String(e.message || e))}</div></div>`;
+      }
+    }
+    function azRender(res) {
+      const coupees = res.filter(x => x.niveau === 'coupe');
+      const lignes = res.map(x => {
+        const etat = x.niveau === 'coupe' ? `<span class="stt-pill p-ko">🛑 Coupé le ${sttHeure(x.at)}</span>`
+          : `<span class="stt-pill p-mai">● Protégé</span>`;
+        const bouton = x.niveau === 'coupe' ? `<button type="button" class="stt-btn" data-az-res="${safeText(x.nom)}">Rouvrir</button>` : '';
+        const note = x.niveau === 'alerte' ? `<span class="stt-meta">dernière alerte de volume le ${sttHeure(x.at)}</span>` : '';
+        return `<div class="stt-row"><span class="stt-plat">${safeText(x.app)}</span>${etat}${bouton}${note}</div>`;
+      }).join('');
+      const conseil = coupees.length ? `<div class="stt-meta stt-err">Ces utilisateurs n'ont plus de transcription. Volume normal : Rouvrir. Sinon, change d'abord la clé dans Azure.</div>` : '';
+      return `<div id="az-banner" class="stt-banner ${coupees.length ? 'stt-panne' : 'stt-mai'}"><div class="stt-head"><span class="stt-title">Protection Azure</span><span class="stt-main">${coupees.length ? `🛑 ${coupees.length} ressource(s) coupée(s)` : '● Armée'}</span></div>${lignes}${conseil}`
+        + `<div class="stt-foot">Azure compte le volume reçu, même d'une clé volée. Alerte Telegram, puis coupure automatique. DictoKey : 800 Mo puis 1,5 Go par heure. SubWhisper Pro : 1 puis 3 Go. Ou 500 puis 1 000 appels par heure.</div></div>`;
+    }
+    document.addEventListener('click', async (ev) => {
+      const b = ev.target.closest && ev.target.closest('[data-az-res]');
+      if (!b) return;
+      if (!confirm("Rouvrir cette ressource ?\n\nSi le volume ne vient pas de vrais utilisateurs, change d'abord la clé dans Azure : sinon la dépense repart.")) return;
+      b.disabled = true;
+      try {
+        const r = await fetch(`${DK_GATEWAY}/admin/azure-rouvrir?res=${encodeURIComponent(b.dataset.azRes)}`, { method: 'POST', headers: { Authorization: `Bearer ${getToken(getApp('dk'))}` } });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        azLoad();
+      } catch (e) { b.disabled = false; alert(`Réouverture impossible : ${e.message || e}`); }
+    });
+
     function stPlaceholder(id = 'st') {
       const src = ST_SOURCES[id];
       setTimeout(() => stLoad(id), 0);
@@ -3525,7 +3567,7 @@
       else if (app.key === 'dkpc') content = renderDkpcView(data);
       else if (app.key === 'factory') content = renderFactoryView(data);
       else if (app.key === 'studio') content = renderStudioView(data);
-      else if (app.key === 'st') content = coutPlaceholder() + sttPlaceholder() + stPlaceholder('st') + stPlaceholder('swp') + stPlaceholder('jv');   // v2.44.0 : coûts en tête
+      else if (app.key === 'st') content = coutPlaceholder() + azPlaceholder() + sttPlaceholder() + stPlaceholder('st') + stPlaceholder('swp') + stPlaceholder('jv');   // v2.44.0 : coûts en tête
       else content = renderPlaceholder(app, data);
       // UN SEUL bouton « Actualiser », partout (demande Quang 16/07) : la fresh-bar juste en dessous EST
       // un bouton cliquable en entier, et elle porte le contexte (statut + date + âge). Le bouton du header
