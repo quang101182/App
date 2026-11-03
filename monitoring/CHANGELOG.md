@@ -6,6 +6,28 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.50.0-revue-statuts — 03/11/2026 · Les statuts affichés ne suivaient plus les décisions
+
+Revue complète des 9 onglets (données réelles, origine `dash.se7enai.com` rejouée) : 0 erreur
+console, 0 requête en échec, mais six affichages contredisaient des faits vérifiés.
+
+- **Factory** : arrêtée le 16/09/2026, elle affichait encore « Posting 1/j », « Warm-up » et une
+  niche #3 « à créer ». → bandeau d'arrêt, badge « Arrêté le 16/09 », niche fantôme retirée. Les
+  compteurs restent (domaines conservés). « Polar · non branché » → « plus en vente depuis le
+  20/08 » : le worker `factory-stats` répond `lemonsqueezy_key_missing`, aucun produit n'a été
+  remis en vente.
+- **Acquisition** : les dons étaient attribués à Lemon Squeezy (fermé le 20/08, le site pointe
+  sur Polar) → libellé daté des deux. La tuile « Clic CTA » annonçait « accès anticipé /
+  sur-mesure / soutien » alors que le site compte toute fenêtre sauf les mentions légales
+  (téléchargement et DictoKey PC compris) → renommée « Fenêtre ouverte », avec ce qu'elle compte.
+- **Vue d'ensemble** : la carte DictoKey PC affichait « Lot P3 », texte d'attente du chantier de
+  juillet → clics du hub vers DictoKey PC (seule mesure de site qui existe pour lui).
+- **Studio** : planning sans aucune date à venir → « Aucune publication depuis le 12/10/2026 »
+  au lieu de « périmé », sans présumer d'une pause. Collecte TikTok du 17/09 publiée.
+- **DictoKey** : message de chargement « 5 sources, ~20 s » → 7 sources, mesuré 6,6 à 44 s.
+
+---
+
 ## v2.25.0-offrable — 17/08/2026 · Le funnel reprochait aux visiteurs de ne pas cliquer un bouton qui n'existait pas
 
 **Le denominateur comptait des gens a qui on n'offre rien.** Ondine est Windows uniquement.
