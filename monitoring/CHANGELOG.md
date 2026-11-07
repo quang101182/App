@@ -6,6 +6,17 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.58.1-auto — 07/11/2026 · Interrupteur mieux présenté, Moteurs & coûts actualisé
+
+- PC : l'interrupteur quitte la ligne du logo (il y passait à la ligne, capture de Quang) pour une vraie ligne de
+  réglage « Actualisation auto · 5 min ● » sous la marque ; téléphone : inchangé (barre du haut), masqué du tiroir.
+- **Moteurs & coûts** : le bandeau affichait l'heure d'un premier chargement vide (« il y a 1 h ») alors que ses
+  blocs relisent en direct à chaque affichage. Il prend l'heure de la dernière lecture (« lues en direct ») et
+  rejoint l'actualisation auto : relu toutes les 5 min s'il reste ouvert (banc : 6 lectures en direct après 1 h).
+- Dates ISO restantes (Ondine, journal des refus) en JJ/MM/AAAA.
+
+---
+
 ## v2.58.0-auto — 07/11/2026 · Actualisation automatique + corrections du passage QA
 
 - **Interrupteur « Auto »** (menu sur PC, barre du haut sur téléphone), mémorisé par appareil, activé par défaut.

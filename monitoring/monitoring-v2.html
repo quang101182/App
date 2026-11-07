@@ -53,7 +53,6 @@
     .nav-icon { width: 18px; text-align: center; font-size: 1rem; }
     .product-dot { width: 8px; height: 8px; margin-left: auto; border-radius: 50%; background: var(--product-color); box-shadow: 0 0 7px var(--product-color); }
     .side-footer { margin-top: auto; padding: 18px 10px 4px; color: var(--ink-faint); font-size: .67rem; }
-    .brand { flex-wrap: wrap; }
     .auto-toggle { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding: 3px 8px 3px 4px; border: 1px solid var(--line-strong); border-radius: 999px; background: transparent; color: var(--ink-muted); font-size: .7rem; font-weight: 700; cursor: pointer; }
     .auto-knob { position: relative; width: 26px; height: 14px; border-radius: 999px; background: var(--surface-raised); transition: background .15s; }
     .auto-knob::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink-faint); transition: transform .15s, background .15s; }
@@ -61,12 +60,20 @@
     .auto-toggle.on .auto-knob { background: rgba(34, 197, 94, .35); }
     .auto-toggle.on .auto-knob::after { transform: translateX(12px); background: var(--good); }
     .mobile-bar .auto-toggle { margin-left: auto; }
+    /* v2.58.1 — sur PC, une vraie ligne de réglage sous la marque (libellé à gauche, état + interrupteur à droite) */
+    .auto-row { display: flex; width: 100%; margin: -6px 0 12px; padding: 8px 10px 8px 12px; border-radius: 10px; border-color: var(--line); font-size: .76rem; font-weight: 600; }
+    .auto-row .auto-label { margin-right: auto; }
+    .auto-row .auto-etat { color: var(--ink-faint); font-size: .68rem; font-weight: 700; }
+    .auto-row .auto-etat::after { content: "coupée"; }
+    .auto-row.on .auto-etat::after { content: "5 min"; color: var(--good); }
+    .auto-row:hover { background: rgba(255, 255, 255, .03); }
     .fresh-echec { color: var(--warn); }
     .date-nowrap { white-space: nowrap; }
     .drawer-close { display: none; }
     @media (max-width: 900px) {
       .app.drawer-open .drawer-close { display: block; margin: 0 0 8px auto; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: transparent; color: var(--ink-muted); font: inherit; font-size: .8rem; cursor: pointer; }
       body.drawer-lock { overflow: hidden; }
+      .auto-row { display: none; }   /* sur téléphone, l'interrupteur est dans la barre du haut */
     }
     .nav-item.nav-sub { min-height: 34px; padding-left: 40px; font-size: .86rem; font-weight: 600; }
     .nav-item.nav-archive { opacity: .7; }
@@ -719,7 +726,8 @@
   <div class="app" id="app-shell">
     <div class="scrim" id="nav-scrim" aria-hidden="true"></div>
     <aside class="sidebar" aria-label="Navigation principale">
-      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Se<span class="brand-seven">7</span>en&nbsp;AI</span><button type="button" class="auto-toggle" data-auto-toggle role="switch" aria-checked="true" title="Actualisation automatique : en entrant dans une page, mise à jour si les chiffres ont plus de 5 minutes (mémorisé sur cet appareil)"><span class="auto-knob" aria-hidden="true"></span><span>Auto</span></button></div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Se<span class="brand-seven">7</span>en&nbsp;AI</span></div>
+      <button type="button" class="auto-toggle auto-row" data-auto-toggle role="switch" aria-checked="true" title="En entrant dans une page, mise à jour si les chiffres ont plus de 5 minutes. Mémorisé sur cet appareil."><span class="auto-label">Actualisation auto</span><span class="auto-etat"></span><span class="auto-knob" aria-hidden="true"></span></button>
       <button type="button" class="drawer-close" id="drawer-close" aria-label="Fermer la navigation">✕ Fermer</button>
       <nav id="navigation"></nav>
       <div class="side-footer"></div>
@@ -733,7 +741,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.58.0-auto';
+    const VERSION = 'v2.58.1-auto';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Toutes les apps en un coup d’œil, chargées à l’ouverture.', sections: [] },
@@ -1071,6 +1079,8 @@
     // Delta depuis le dernier instantané STRICTEMENT antérieur à aujourd'hui. Renvoie null si
     // l'historique manque ou ne contient que le jour même : sans point de comparaison, il n'y a
     // pas de « depuis hier » — et l'écrire quand même serait une mesure inventée.
+    // v2.58.1 — une date ISO (AAAA-MM-JJ…) affichée en JJ/MM/AAAA ; tout le reste est rendu tel quel.
+    function isoFr(s) { return /^\d{4}-\d{2}-\d{2}/.test(s || '') ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : s; }
     function ondineDlDelta(dlReal) {
       if (!dlReal || !dlReal.ok || !dlReal.history || !dlReal.history.length) return null;
       const today = new Date().toISOString().slice(0, 10);
@@ -1220,7 +1230,7 @@
       const [label, color] = freshState(at);
       const age = Date.now() - at.getTime();
       const tone = age > 86400000 ? 'perime' : age > 21600000 ? 'vieillit' : 'frais';
-      return `<button class="freshbar" type="button" data-refresh="${app.key}" data-fresh="${tone}" style="--fresh-color:${color}" title="Actualiser cette vue"><span class="fresh-dot" aria-hidden="true"></span><span><strong>${label}</strong><span class="fresh-long"> · données ${app.auth === 'token' ? 'protégées' : app.key === 'home' ? (HOME_PRODUCTS.some(k => getToken(getApp(k))) ? 'protégées et publiques' : 'publiques seulement') : 'publiques'} · actualisées le <strong>${formatDate(at)}</strong></span> (${relativeTime(at)})${echecAuto.has(app.key) ? ' · <strong class="fresh-echec">⚠ mise à jour échouée</strong>' : ''}${autoActif() && !SANS_AUTO.has(app.key) ? '<span class="fresh-long"> · auto</span>' : ''}</span><span class="fresh-action">↻ Actualiser</span></button>`;
+      return `<button class="freshbar" type="button" data-refresh="${app.key}" data-fresh="${tone}" style="--fresh-color:${color}" title="Actualiser cette vue"><span class="fresh-dot" aria-hidden="true"></span><span><strong>${label}</strong><span class="fresh-long"> · ${app.key === 'st' ? 'lues en direct' : 'données ' + (app.auth === 'token' ? 'protégées' : app.key === 'home' ? (HOME_PRODUCTS.some(k => getToken(getApp(k))) ? 'protégées et publiques' : 'publiques seulement') : 'publiques')} · actualisées le <strong>${formatDate(at)}</strong></span> (${relativeTime(at)})${echecAuto.has(app.key) ? ' · <strong class="fresh-echec">⚠ mise à jour échouée</strong>' : ''}${autoActif() && !SANS_AUTO.has(app.key) ? '<span class="fresh-long"> · auto</span>' : ''}</span><span class="fresh-action">↻ Actualiser</span></button>`;
     }
 
     // === P1 — Acquisition (parité stricte avec index.html v1.23.0, formules identiques) ===
@@ -1369,7 +1379,7 @@
       //     autant de fois qu'il télécharge ; les robots d'indexation et antivirus comptent aussi) ;
       //   • winget n'est PAS dedans — Microsoft n'expose aucun compteur public par paquet. Le jour où la
       //     PR passe, ce total devient un plancher, pas un total.
-      const dlDeltaTxt = dlDelta ? ` · +${dlDelta.delta} depuis le ${dlDelta.since}` : '';
+      const dlDeltaTxt = dlDelta ? ` · +${dlDelta.delta} depuis le ${isoFr(dlDelta.since)}` : '';
       const dlNote = dlRealOk
         ? `versions publiques depuis le 02/08 (${dlPubN}) · ${dl} clic(s) · hors winget · ${dlReal.total} tous builds${dlDeltaTxt}`
         : `GitHub injoignable — ${dl} clic(s) sur l’installeur (déclaratif)`;
@@ -1875,7 +1885,7 @@
       const tete = `<div class="sm">Interrupteur : <b style="color:${MODE[1]}">${MODE[0]}</b> — ${safeText(MODE[2])}</div>`
         + (bugs.length ? `<div class="sm" style="color:#ef4444"><b>⛔ ${bugs.length} refus d’un appareil en bienvenue sous 100 : BUG</b> (${bugs.slice(0, 3).map(r => `${safeText(r.jour)} · ${safeText(String(r.deviceId).slice(0, 8))} · limite ${safeText(String(r.limite))}`).join(' ; ')})</div>` : '');
       const lj = Object.keys(jours).sort().reverse();
-      if (!lj.length) return tete + `<div class="no-data">Aucun refus « limite du jour » noté depuis le ${safeText(b.depuis || '?')} (journal tenu depuis le 07/11/2026)</div>`;
+      if (!lj.length) return tete + `<div class="no-data">Aucun refus « limite du jour » noté depuis le ${safeText(isoFr(b.depuis) || '?')} (journal tenu depuis le 07/11/2026)</div>`;
       const lignes = lj.map(j => { const d = jours[j];
         return `<div class="sm">• <b>${safeText(j.slice(8, 10) + '/' + j.slice(5, 7))}</b> : ${dkNum(d.refusApp.size)} appareil(s) refusé(s) à la limite (${dkNum(d.refusN)} refus)`
           + (d.bienvApp.size ? `, dont ${dkNum(d.bienvApp.size)} en bienvenue` : '')
@@ -3934,6 +3944,7 @@
       // UN SEUL bouton « Actualiser », partout (demande Quang 16/07) : la fresh-bar juste en dessous EST
       // un bouton cliquable en entier, et elle porte le contexte (statut + date + âge). Le bouton du header
       // était un doublon strict, au même endroit à l'écran — il ne disait rien de plus.
+      if (app.key === 'st' && !err) state.loadedAt.set('st', new Date());   // v2.58.1 : chaque affichage = lecture en direct
       document.getElementById('view-root').innerHTML = `<div class="page-head"><div><h1>${safeText(app.name)} <span class="view-badge">${VERSION}</span></h1><p>${safeText(app.subtitle)}</p></div></div>${FreshBar(app)}${content}`;
       if (app.key === 'dk' && !err && getToken(app)) dkMountCharts(data);   // après innerHTML : les canvas doivent exister
     }
@@ -3951,9 +3962,12 @@
     // (`monitoring_v2_auto`, absent = activé). Activé : en entrant dans une page, les derniers chiffres connus
     // s'affichent tout de suite ; s'ils ont plus de AUTO_SEUIL_MS, mise à jour EN ARRIÈRE-PLAN (pas d'écran de
     // chargement) ; page ouverte et visible → vérification chaque minute. Désactivé : seul « Actualiser » recharge
-    // (une page jamais chargée sur l'appareil se charge quand même une fois). « Moteurs & coûts » lit déjà en direct.
+    // (une page jamais chargée sur l'appareil se charge quand même une fois). « Moteurs & coûts » : voir SANS_AUTO.
     // Une mise à jour en arrière-plan qui échoue ne vide JAMAIS l'écran : les chiffres restent, le bandeau le dit.
-    const AUTO_LS = 'monitoring_v2_auto', AUTO_SEUIL_MS = 5 * 60 * 1000, SANS_AUTO = new Set(['st']);
+    // v2.58.1 : « Moteurs & coûts » n'est plus exclu. Ses blocs relisent en direct à CHAQUE affichage ; c'est son
+    // bandeau qui mentait (heure du premier chargement, vide). Il prend désormais l'heure de la dernière lecture
+    // en direct (renderApp), et l'actualisation auto le relit toutes les 5 min s'il reste affiché.
+    const AUTO_LS = 'monitoring_v2_auto', AUTO_SEUIL_MS = 5 * 60 * 1000, SANS_AUTO = new Set();
     const echecAuto = new Map();
     function autoActif() { try { return localStorage.getItem(AUTO_LS) !== '0'; } catch (e) { return true; } }
     function majInterrupteurs() {
