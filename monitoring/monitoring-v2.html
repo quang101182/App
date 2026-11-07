@@ -658,7 +658,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.51.0-bienvenue';
+    const VERSION = 'v2.52.0-studio-fige';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -3569,7 +3569,16 @@
         ? `<div class="pf-group"><div class="pf-group-h"><span class="pf-tag paid">Boostées · vues achetées</span><span class="pf-group-sum">${boosted.length} vidéo${boosted.length > 1 ? 's' : ''} · <b>${sumViews(boosted)}</b> vues</span></div>${studioPerfRows(boosted)}<div class="pf-note">Vues payées — jamais additionnées à l’organique : elles ne mesurent pas la traction.</div></div>`
         : '';
       const foot = `Snapshot du ${safeText(snap)} · ${nSnap} relevé${nSnap > 1 ? 's' : ''} · posts perso exclus${ref ? ` · réf organique compte ~${ref.current.views} vues` : ''}`;
-      return Panel('studio-perf', '📊 Performances TikTok', `${organicBlock}${boostedBlock}<div class="pf-foot">${foot}</div><p class="pf-note">Ce bloc couvre <b>tout le compte @se7en.ai</b> : il ne suit pas les filtres de l’agenda (le rollup n’a pas la notion de projet).</p>`, true);
+      // v2.52.0 (07/11/2026) — le bloc affichait des chiffres du 17/09 SANS le dire : seule la petite ligne de pied
+      // portait la date. Au-delà de 14 j sans collecte, on l'annonce EN TÊTE, avec l'âge. Le collecteur
+      // (`video-studio/tools/analytics_collect.py`, CDP) est manuel : rien ne garantit qu'il tourne.
+      const snapDt = (() => { const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})$/.exec(String(d.generatedAt || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null; })();
+      const STUDIO_PERF_STALE_DAYS = 14;
+      const perfStale = snapDt && (Date.now() - snapDt.getTime()) > STUDIO_PERF_STALE_DAYS * 86400000;
+      const staleBar = perfStale
+        ? `<div class="st-planning-bar stale"><span class="fb-ic">⚠</span><span>Chiffres <b>figés au ${safeText(snap.split(' à ')[0])}</b> (${relativeTime(snapDt)}) : aucune collecte depuis, les vidéos publiées après ne sont pas mesurées ici.</span></div>`
+        : '';
+      return Panel('studio-perf', '📊 Performances TikTok', `${staleBar}${organicBlock}${boostedBlock}<div class="pf-foot">${foot}</div><p class="pf-note">Ce bloc couvre <b>tout le compte @se7en.ai</b> : il ne suit pas les filtres de l’agenda (le rollup n’a pas la notion de projet). Il ne couvre <b>ni @namaeatelier ni les chaînes YouTube</b> (une par application).</p>`, true);
     }
     // '20260630-1912' — chaîne compacte sans fuseau, affichée brute par la prod. Formatée ici, sans prétendre connaître le fuseau du collecteur.
     function studioFmtSnap(s) {

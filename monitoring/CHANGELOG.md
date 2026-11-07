@@ -6,6 +6,16 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.52.0-studio-fige — 07/11/2026 · Studio : les chiffres TikTok disent leur âge
+
+- Le bloc « 📊 Performances TikTok » affichait le relevé du 17/09 sans alerte (date seulement en pied).
+  Au-delà de **14 jours** sans collecte, un bandeau orange en tête annonce « chiffres figés au … (il y a N j) ».
+- Note de périmètre : le bloc ne couvre ni @namaeatelier ni les chaînes YouTube (une par application,
+  décision de Quang du 07/11).
+- Aucune donnée ni collecte modifiée : `data/analytics.json` inchangé.
+
+---
+
 ## v2.51.0-bienvenue — 07/11/2026 · DictoKey : activation réelle et semaine de bienvenue
 
 Deux cartes ajoutées à l'onglet DictoKey (passerelle 1.17.x, app 2.77.0 en examen production) :
