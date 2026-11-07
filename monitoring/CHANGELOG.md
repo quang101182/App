@@ -6,6 +6,21 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.56.0-dictokey — 07/11/2026 · Onglet DictoKey réorganisé + statut des gratuits
+
+- **17 panneaux → 9** (maquette v0.3) : Activation, Usage (ouverts) ; Abonnements & offres, Rétention, Play Store,
+  Site & acquisition, Infra, Appareils, Archives des expériences (repliés, **résumé lisible dans l'en-tête**).
+  Rien n'est supprimé : tout est regroupé ; refonte v2.61 et attribution v2.61.7 vont dans les Archives.
+- « L'essentiel » en 4 tuiles d'un seul style ; barre de tendance retirée (doublons) ; « hier N » au lieu d'un %.
+- **Statut des appareils** (demande de Quang) : en semaine de bienvenue (100/j) · gratuits (30/j) · premium · pro,
+  avec les actifs 7 j ; badge **🎁 J3/7** dans la liste. Règle copiée de la passerelle (`dkBienvenueJour`),
+  recoupée par un calcul indépendant : 26 / 581 / 32 identiques.
+- Migration unique des états de panneaux mémorisés (`monitoring_v2_panels_rev` = 2) : sinon l'ancien « Appareils »
+  déplié primait sur le nouveau défaut.
+- Côté passerelle (dépôt dictokey, v1.17.3 du même jour) : chargement de l'onglet 31,8 s → 1,8 s.
+
+---
+
 ## v2.55.0-accueil — 07/11/2026 · Vue d'ensemble refaite (maquette v0.3 validée)
 
 - L'accueil **charge lui-même** les produits (DictoKey, SubWhisper Pro, StoryVoice, DictoKey PC) avec les mêmes

@@ -118,6 +118,14 @@
     .panel { overflow: hidden; }
     .panel-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 52px; padding: 13px 16px; border: 0; background: transparent; color: var(--ink); text-align: left; font-weight: 750; cursor: pointer; }
     .panel-toggle:hover { background: rgba(255, 255, 255, .025); }
+    .panel-toggle .panel-title { margin-right: auto; text-align: left; }
+    .panel-meta { margin: 0 12px 0 16px; color: var(--ink-faint); font-size: .75rem; font-weight: 500; text-align: right; }
+    @media (max-width: 640px) { .panel-meta { display: none; } }
+    .badge.b-bienv { margin-left: 4px; background: rgba(245, 181, 46, .14); color: var(--warn); border-color: rgba(245, 181, 46, .35); }
+    .dk-statuts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .dk-statut { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-soft); }
+    .dk-statut b { display: block; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+    .dk-statut span { color: var(--ink-muted); font-size: .75rem; }
     .panel-chevron { color: var(--accent); transition: transform .16s; }
     .panel[data-open="true"] .panel-chevron { transform: rotate(180deg); }
     .panel-content { display: none; padding: 0 16px 16px; color: var(--ink-muted); font-size: .85rem; }
@@ -688,7 +696,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.55.0-accueil';
+    const VERSION = 'v2.56.0-dictokey';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Toutes les apps en un coup d’œil, chargées à l’ouverture.', sections: [] },
@@ -1148,9 +1156,20 @@
     function loadPanelState() { try { return JSON.parse(localStorage.getItem(PANEL_LS)) || {}; } catch (e) { return {}; } }
     let panelState = loadPanelState();
     function savePanelState() { try { localStorage.setItem(PANEL_LS, JSON.stringify(panelState)); } catch (e) {} }
-    function Panel(id, title, content, open = false) {
+    // v2.56.0 — réorganisation de l'onglet DictoKey (maquette v0.3) : les états mémorisés des anciens panneaux
+    // `dk-*` (dont « Appareils », déplié) primeraient sur les nouveaux défauts. On les oublie UNE fois, puis
+    // les choix de Quang sont de nouveau mémorisés normalement.
+    const PANEL_REV_LS = 'monitoring_v2_panels_rev', PANEL_REV = '2';
+    try {
+      if (localStorage.getItem(PANEL_REV_LS) !== PANEL_REV) {
+        Object.keys(panelState).forEach(k => { if (k.startsWith('dk-')) delete panelState[k]; });
+        savePanelState(); localStorage.setItem(PANEL_REV_LS, PANEL_REV);
+      }
+    } catch (e) {}
+    // `meta` (v2.56.0) : résumé affiché DANS l'en-tête, lisible sans déplier (masqué sur téléphone).
+    function Panel(id, title, content, open = false, meta = '') {
       const isOpen = Object.prototype.hasOwnProperty.call(panelState, id) ? !!panelState[id] : open;
-      return `<section class="panel" data-open="${isOpen}" id="${id}"><button class="panel-toggle" type="button" aria-expanded="${isOpen}" aria-controls="${id}-content"><span>${safeText(title)}</span><span class="panel-chevron" aria-hidden="true">⌄</span></button><div class="panel-content" id="${id}-content">${content}</div></section>`;
+      return `<section class="panel" data-open="${isOpen}" id="${id}"><button class="panel-toggle" type="button" aria-expanded="${isOpen}" aria-controls="${id}-content"><span class="panel-title">${safeText(title)}</span>${meta ? `<span class="panel-meta">${safeText(meta)}</span>` : ''}<span class="panel-chevron" aria-hidden="true">⌄</span></button><div class="panel-content" id="${id}-content">${content}</div></section>`;
     }
     // La couleur ne porte JAMAIS l'info seule : le mot (Frais/Vieillit/Périmé) la dit toujours.
     // Au-delà de 6 h le bandeau se teinte (orange), au-delà de 24 h il passe en rouge — comme le « stale » de la prod.
@@ -1504,6 +1523,29 @@
     // L'offre retenue est `effectiveTier` = offre réellement appliquée à la DERNIÈRE requête (updateLastSeen,
     // même calcul que la limite, index.js:1088), à défaut `tier`. Renvoie le numéro de jour 1..7, ou 0.
     // ⚠ Si la passerelle change cette règle, ce bloc doit suivre : il ne fait qu'en reproduire le résultat.
+    let dkBienvCourant = null;   // config de bienvenue du dernier chargement (lue par les lignes de la liste)
+    // v2.56.0 — statut du jour de chaque appareil Android, demandé par Quang le 07/11 (« gratuit, 100 ou 30 ? »).
+    // Offre = `effectiveTier` (appliquée à la DERNIÈRE requête), à défaut `tier`. « Premium » ici = appareils, pas
+    // abonnés : un essai Google gratuit est un abonnement actif → ne JAMAIS l'additionner aux abonnés Google.
+    function dkRenderStatuts(devices, bienv) {
+      const c = { bienv: 0, free: 0, premium: 0, pro: 0 }, a = { bienv: 0, free: 0, premium: 0, pro: 0 };
+      const depuis7 = Date.now() - 7 * 86400000;
+      devices.forEach(d => {
+        const t = d.effectiveTier || d.tier || 'free';
+        const k = t === 'pro' ? 'pro' : t === 'premium' ? 'premium' : (dkBienvenueJour(d, bienv) ? 'bienv' : 'free');
+        c[k]++;
+        const vu = Date.parse(d.lastSeen || '');
+        if (!isNaN(vu) && vu >= depuis7) a[k]++;
+      });
+      const mode = bienv && bienv.config && bienv.config.mode;
+      const carte = (n, actifs, titre, sous) => `<div class="dk-statut"><b>${n}</b><span>${titre}</span><br><span>${sous} · ${actifs} actif${actifs > 1 ? 's' : ''} 7 j</span></div>`;
+      return `<div class="dk-statuts">`
+        + carte(c.bienv, a.bienv, '🎁 Gratuits en semaine de bienvenue', mode === 'on' || mode === 'test' ? '100 dictées/jour' : 'interrupteur inactif')
+        + carte(c.free, a.free, 'Gratuits', '30 dictées/jour')
+        + carte(c.premium, a.premium, 'Premium (appareils)', '1 000/jour')
+        + carte(c.pro, a.pro, 'Pro (offerts par toi)', '1 000/jour')
+        + `</div><p class="acq-when">Offre appliquée au dernier passage de chaque appareil (règle de la passerelle, semaine_bienvenue.js). « Premium » compte des appareils, essais compris : les abonnés payants sont ceux de Google.</p>`;
+    }
     function dkBienvenueJour(d, bienv) {
       const cfg = bienv && bienv.config;
       const mode = cfg && cfg.mode;
@@ -2938,6 +2980,7 @@
     function renderDkView(payload) {
       if (!payload || !payload.mon) return EmptyState('DictoKey', 'Aucune donnée reçue du gateway.');
       const { mon, stats, dev, visit, click, play, fb, src, fun, bienv } = payload;
+      dkBienvCourant = bienv || null;
       const ds = dkDeviceStats(dev);
       // Devices triés par lastSeen desc (comme la prod). Les filtres/la page sont conservés entre les rendus.
       dkDevState.all = ds.devicesList.slice().sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
@@ -2950,15 +2993,7 @@
       const dauYesterday = dauDaily.length > 1 ? ((dauDaily[1].by_platform && dauDaily[1].by_platform.mobile) || 0) : 0;
       const dc = dkPctChange(dauToday, dauYesterday);
       const sg = mon.subscriptions_google;
-      const trend = `<div class="trend-bar">`
-        + `<div class="trend-item"><span class="trend-label">Requêtes</span><span class="trend-val">${mon.trend.requests.today}</span><span class="change ${rc.cls}">${safeText(rc.text)}</span></div>`
-        + `<div class="trend-item"><span class="trend-label">Utilisateurs actifs</span><span class="trend-val">${dauToday}</span><span class="change ${dc.cls}">${safeText(dc.text)}</span></div>`
-        + `<div class="trend-item"><span class="trend-label">Churn</span><span class="trend-val churn-info"><span class="up">↑ ${mon.churn.upgrades}</span> / <span class="down">↓ ${mon.churn.downgrades}</span></span></div>`
-        // v2.46.3 (24/10) — le Churn ci-dessus compte des passages de tier par APPAREIL, achats de test compris (le 24/10 :
-        // 4 des 5 « ↓ » = le Samsung de test). La seule source qui dise combien de gens PAIENT est le rapport financier Google.
-        + (sg && sg.ok ? `<div class="trend-item"><span class="trend-label">Abonnés Google</span><span class="trend-val">${dkNum(sg.active)}</span>`
-          + `<span class="change">au ${safeText(sg.as_of || '?')}</span></div>` : '')
-        + `</div>`;
+      // v2.56.0 — barre de tendance retirée (doublons des tuiles ; churn → « Abonnements & offres »).
 
       // --- KPI hero « Appareils réels actifs » : Play Console prioritaire, sinon fallback cumul KV.
       // v1.10.0 : quand la source est Play, le breakdown pro/premium/free n'est PLUS affiché ici — retrancher
@@ -2990,12 +3025,17 @@
       }
       const today = (stats.stats && stats.stats.today) || {};
       const ecm = (stats.stats && stats.stats.estimated_cost_month) || {};
-      const kpis = `<div class="kpi-grid">${heroTile}`
-        + KpiTile('Actifs aujourd’hui', dauToday, dauSub)
+      // v2.56.0 — « l'essentiel » en 4 tuiles d'un seul style (maquette v0.3). Les appareils réels actifs
+      // (ex-tuile héros) passent en note des actifs ; « hier N » plutôt qu'un % contre une veille complète.
+      const fmtJM = iso => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso)) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '?';
+      const kpis = `<div class="kpi-grid">`
+        + KpiTile('Abonnés Google', (sg && sg.ok) ? dkNum(sg.active) : '—', (sg && sg.ok) ? `rapport financier Google au ${fmtJM(sg.as_of)} · seuls vrais payants` : 'rapport Google indisponible')
+        + KpiTile('Actifs aujourd’hui', dauToday, `hier ${dauYesterday}${dauSub ? ` · ${dauSub}` : ''} · ${heroVal} appareils actifs — ${heroSub}`)
         + KpiTile('Dictées aujourd’hui', today.transcriptions || 0, `+${today.rewrites || 0} réécr. +${today.corrections || 0} corr. +${today.translations || 0} trad.`)
-        + KpiTile('Coût du mois', ecm.total || '$0.00', `W:${ecm.whisper || ecm.groq_whisper || '—'} L:${ecm.llm || ecm.groq_llm || '—'} A:${ecm.azure || ecm.azure_translate || '—'}`)
+        + KpiTile('Coût du mois', ecm.total || '$0.00', `Whisper ${ecm.whisper || ecm.groq_whisper || '—'} · LLM ${ecm.llm || ecm.groq_llm || '—'} · Azure ${ecm.azure || ecm.azure_translate || '—'} · estimation`)
         + `</div>`;
 
+      void heroTile;   // v2.56.0 : conservée pour mémoire du calcul ; affichée désormais en note des actifs
       // --- Bandeau « Premium runtime non-syncé KV » : pattern NORMAL app < v2.61.4, PAS un incident.
       // /admin/set-tier INTERDIT (créerait un Premium gratuit à vie en cas de résiliation).
       const nowMs = Date.now(), sevenDaysMs = 7 * 86400 * 1000;
@@ -3026,6 +3066,7 @@
 
       // --- Play Store
       const a = play && play.aggregated;
+      const num0 = v => typeof v === 'number' ? v.toLocaleString('fr-FR') : (v || '—');
       let psHtml;
       if (a) {
         const num = v => typeof v === 'number' ? v.toLocaleString('fr-FR') : (v || '—');
@@ -3082,25 +3123,23 @@
       const donuts = `<div class="donut-grid"><div><div class="chart-title">Langues dictées</div><div class="chart-box donut"><canvas id="dk-chart-lang"></canvas></div></div>`
         + `<div><div class="chart-title">Top pays actifs</div><div class="chart-box donut"><canvas id="dk-chart-country"></canvas></div></div></div>`;
 
-      return sttLien() + trend + silent
+      // v2.56.0 — 17 panneaux → 9 (maquette v0.3 validée). Aucun contenu supprimé : tout est regroupé ;
+      // les expériences terminées (refonte v2.61, attribution v2.61.7) vont dans « Archives des expériences ».
+      // Les ids `dk-*` qui portent un comportement (dk-devices) sont gardés ; les autres sont neufs (`dk2-*`).
+      const nBienv = ds.devicesList.filter(d => dkBienvenueJour(d, bienv) > 0).length;
+      const playMeta = a ? `${num0(a.installs_cumulative)} installs · note ${(a.rating_avg || 0).toFixed(2).replace('.', ',')} · au ${dkPlayDate(a.last_data_date)}` : 'en attente des données Google';
+      const realCount = ds.devicesList.length - ds.phantomCount;
+      return sttLien() + silent
         + `<section class="section">${kpis}</section>`
-        + `<section class="section">${Panel('dk-site', '🌐 Funnel site → Play Store', siteFunnel, true)}</section>`
-        + `<section class="section">${Panel('dk-play', '📥 Play Store — adoption & activité', psHtml, true)}</section>`
-        + `<section class="section">${Panel('dk-activity', '📈 Activité', activity, true)}</section>`
-        + `<section class="section">${Panel('dk-source', '🫧⌨ Bulle ou clavier ?', renderDkSourceSplit(src), true)}</section>`
-        + `<section class="section">${Panel('dk-accueil', '🚪 Nouvel accueil (app 2.75)', renderDkAccueil(fun), true)}</section>`
-        + `<section class="section">${Panel('dk-premiere', '🎯 Activation : 1ʳᵉ dictée', renderDkPremiereDictee(fun), true)}</section>`
-        + `<section class="section">${Panel('dk-bienv', '🎁 Semaine de bienvenue (gratuits)', renderDkBienvenue(bienv), true)}</section>`
-        + `<section class="section">${Panel('dk-usage', '🧰 Usage des fonctions', renderDkUsage(fb), false)}</section>`
-        + `<section class="section">${Panel('dk-perf', '⚡ Performance API', perf, false)}</section>`
-        + `<section class="section">${Panel('dk-split', '🌍 Répartition', donuts, false)}</section>`
-        + `<section class="section">${Panel('dk-fb', '📊 Activation & engagement (Firebase J-1)', renderDkFirebase(fb), false)}</section>`
-        + `<section class="section">${Panel('dk-adoption', '📈 Adoption refonte v2.61', renderDkAdoption(fb), false)}</section>`
-        + `<section class="section">${Panel('dk-attr', '🎯 Attribution install & signaux v2.61.7', renderDkAttribution(fb), false)}</section>`
-        + `<section class="section">${Panel('dk-adv', '🔄 Rétention & usage', renderDkAdvanced(mon.advanced), false)}</section>`
-        + `<section class="section">${Panel('dk-churn', '💱 Mouvements de tier', renderDkChurn(mon.churn, fb), false)}</section>`
-        + `<section class="section">${Panel('dk-devices', '📱 Appareils enregistrés', dkRenderDevicesSection(ds), true)}</section>`
-        + `<section class="section">${Panel('dk-infra', '🛠 Infra — erreurs & coûts', errHtml + costBars, false)}</section>`;
+        + `<section class="section">${Panel('dk2-activation', '🎯 Activation', renderDkPremiereDictee(fun) + `<div class="acq-sub dk-sub2">Nouvel accueil (app 2.75+) : étape par étape</div>` + renderDkAccueil(fun), true, '28 j · installation → 1ʳᵉ vraie dictée')}</section>`
+        + `<section class="section">${Panel('dk2-usage', '📈 Usage', activity + `<div class="acq-sub dk-sub2">Bulle ou clavier ?</div>` + renderDkSourceSplit(src) + `<div class="acq-sub dk-sub2">Fonctions utilisées</div>` + renderDkUsage(fb), true, '7 j · actifs, dictées, bulle ou clavier')}</section>`
+        + `<section class="section">${Panel('dk2-offres', '💳 Abonnements & offres', dkRenderStatuts(ds.devicesList, bienv) + `<div class="acq-sub dk-sub2">Semaine de bienvenue</div>` + renderDkBienvenue(bienv) + `<div class="acq-sub dk-sub2">Mouvements d’offre</div>` + renderDkChurn(mon.churn, fb), false, `${(sg && sg.ok) ? `${dkNum(sg.active)} abonnés Google · ` : ''}${nBienv} en semaine de bienvenue`)}</section>`
+        + `<section class="section">${Panel('dk2-retention', '🔄 Rétention', renderDkAdvanced(mon.advanced), false, 'J1 · J7 · J30')}</section>`
+        + `<section class="section">${Panel('dk2-play', '📥 Play Store', psHtml, false, playMeta)}</section>`
+        + `<section class="section">${Panel('dk2-site', '🌐 Site & acquisition', siteFunnel + `<div class="acq-sub dk-sub2">Activation et sources (Firebase, J-1)</div>` + renderDkFirebase(fb), false, `clic vers Play ${rate.replace('.', ',')} %`)}</section>`
+        + `<section class="section">${Panel('dk2-infra', '🛠 Infra : erreurs, latence & coûts', errHtml + costBars + `<div class="acq-sub dk-sub2">Performance API</div>` + perf + `<div class="acq-sub dk-sub2">Langues et pays</div>` + donuts, false, `coût du mois ${ecm.total || '$0.00'}`)}</section>`
+        + `<section class="section">${Panel('dk-devices', '📱 Appareils', dkRenderDevicesSection(ds), false, `${realCount} · recherche, détail par appareil`)}</section>`
+        + `<section class="section">${Panel('dk2-archives', '🗄 Archives des expériences', renderDkAdoption(fb) + `<div class="acq-sub dk-sub2">Attribution install & signaux (v2.61.7)</div>` + renderDkAttribution(fb), false, 'refonte v2.61 · attribution v2.61.7')}</section>`;
     }
 
     // === P3b2 — Section « Appareils enregistrés » (summary + filtres + recherche + tableau paginé) ===
@@ -3152,7 +3191,9 @@
             + (l1.length ? `<div class="id-sub">${l1.join(' · ')}</div>` : '')
             + `<div class="id-sub">${d.deviceModel ? safeText(d.deviceModel) : '—'}</div>`
             + `<div class="id-sub">${d.androidVersion ? 'A' + safeText(d.androidVersion) : '—'}</div>`;
+          const jBienv = dkBienvenueJour(d, dkBienvCourant);   // v2.56.0 — règle exacte de la passerelle
           const tierCell = `<span class="badge ${tierCls}">${safeText(displayTier === 'premium' ? 'prem' : displayTier)}</span>`
+            + (jBienv ? `<span class="badge b-bienv" title="Semaine de bienvenue : 100 dictées par jour jusqu’au 7e jour, puis 30">🎁 J${jBienv}/7</span>` : '')
             + (showSubTier ? `<div class="tier-kv-sub">KV: ${safeText(kvTier)}</div>` : '');
           // P3b2b : la ligne entière ouvre le détail. `aria-expanded` + `tabindex` = la prod n'avait ni l'un
           // ni l'autre (ligne cliquable au curseur seulement, invisible au clavier et aux lecteurs d'écran).
