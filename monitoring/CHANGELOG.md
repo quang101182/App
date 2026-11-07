@@ -6,6 +6,21 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.55.0-accueil — 07/11/2026 · Vue d'ensemble refaite (maquette v0.3 validée)
+
+- L'accueil **charge lui-même** les produits (DictoKey, SubWhisper Pro, StoryVoice, DictoKey PC) avec les mêmes
+  fonctions que leurs onglets, **seulement si leurs jetons sont présents** (garde-fou §4 de la roadmap : sans jeton,
+  rien n'est appelé — vérifié : 0 appel admin sur la page publique).
+- 4 chiffres transverses, chacun de même nature et même période : **abonnés payants** (Google / Polar / PC),
+  **actifs aujourd'hui** (DictoKey mobile, « hier N » au lieu d'un % contre une veille complète), **nouveaux appareils
+  7 j** (dont en semaine de bienvenue — règle exacte de la passerelle, `dkBienvenueJour`), **coût du mois**.
+- Corrige « Utilisateurs actifs 16 » (comptait les clients SWP terminés) et le faux « Alertes 0 · rien à signaler »
+  affiché tant que les onglets n'étaient pas ouverts.
+- « À surveiller » remonté sous les chiffres clés ; tableau compact des produits (Ondine incluse) au lieu des cartes
+  à cumuls depuis l'origine ; chaînes YouTube en grille (un seul titre, aligné à gauche).
+
+---
+
 ## v2.54.0-youtube-accueil — 07/11/2026 · Chaînes YouTube sur la Vue d'ensemble
 
 - Le panneau « ▶ Chaînes YouTube » passe de l'onglet Studio à la **Vue d'ensemble** (Quang ne le trouvait pas).

@@ -559,13 +559,36 @@
     .pf-m { color: var(--ink-muted); font-size: .73rem; white-space: nowrap; }
     .pf-delta { color: var(--good); }
     .pf-note { margin: 8px 0 0; color: var(--ink-muted); font-size: .71rem; line-height: 1.5; }
-    .yt-row { padding: 10px 0; border-bottom: 1px solid var(--line); }
-    .yt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--ink); }
-    .yt-handle { color: var(--ink-muted); }
-    .yt-since { color: var(--ink-faint); font-size: .75rem; }
-    .yt-links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 6px; }
-    .yt-links a { color: var(--accent); text-decoration: none; font-size: .82rem; }
+    /* v2.55.0 — chaînes YouTube : grille compacte (maquette v0.3) */
+    .yt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+    .yt-card { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--yt-color, var(--accent)); border-radius: var(--radius-sm); background: var(--surface); min-width: 0; }
+    .yt-card b { color: var(--ink); }
+    .yt-handle { color: var(--ink-muted); font-size: .78rem; overflow-wrap: anywhere; }
+    .yt-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 4px; }
+    .yt-links a { color: var(--accent); text-decoration: none; font-size: .8rem; }
     .yt-links a:hover { text-decoration: underline; }
+    .yt-dec { margin-top: 4px; color: var(--ink-faint); font-size: .72rem; }
+    /* v2.55.0 — accueil : tableau compact des produits (remplace les grosses cartes à cumuls depuis l'origine) */
+    .home-table { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+    .home-row { display: grid; grid-template-columns: minmax(150px, 1.5fr) repeat(4, minmax(0, 1fr)) 16px; gap: 10px; align-items: center; padding: 11px 16px; border-top: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+    .home-row:first-child { border-top: 0; }
+    a.home-row:hover { background: rgba(255, 255, 255, .025); }
+    .home-row.th { color: var(--ink-faint); font-size: .66rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; padding-top: 9px; padding-bottom: 9px; }
+    .home-row .hr-name { display: flex; align-items: center; gap: 9px; font-weight: 700; min-width: 0; }
+    .home-row .hr-name i { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--hr-color, var(--accent)); }
+    .home-row .hr-name em { color: var(--ink-faint); font-size: .7rem; font-style: normal; font-weight: 600; }
+    .home-row .hr-num { font-variant-numeric: tabular-nums; font-weight: 700; }
+    .home-row .hr-num small { display: block; color: var(--ink-faint); font-size: .68rem; font-weight: 500; }
+    .home-row .hr-chev { color: var(--ink-faint); }
+    .home-row.repos { opacity: .6; }
+    .hr-up { color: var(--good); } .hr-down { color: var(--crit); } .hr-flat { color: var(--ink-faint); }
+    @media (max-width: 640px) {
+      .home-row { grid-template-columns: minmax(0, 1fr) 64px 58px; padding: 10px 12px; gap: 8px; }
+      .home-row > :nth-child(2), .home-row > :nth-child(3) { text-align: right; }
+      .home-row .hr-hide, .home-row .hr-chev { display: none; }
+      .home-row.th { font-size: .58rem; letter-spacing: .03em; }
+      .home-row { grid-template-columns: minmax(0, 1fr) 78px 56px; }
+    }
     .pf-foot { margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--ink-muted); font-size: .72rem; }
     .st-perf-empty { margin: 0; color: var(--ink-muted); font-size: .79rem; }
     .st-lane { display: grid; gap: 8px; }
@@ -665,10 +688,10 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.54.0-youtube-accueil';
+    const VERSION = 'v2.55.0-accueil';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
-      { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
+      { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Toutes les apps en un coup d’œil, chargées à l’ouverture.', sections: [] },
       { key: 'dk', name: 'DictoKey', icon: '⌨', family: 'products', color: PRODUCT_COLORS.dk, auth: 'token', tokenKey: 'monitoring_admin_token', endpoints: {}, subtitle: 'Adoption, rétention, revenus et infrastructure.', sections: [] },
       // `role: 'repos'` (contexte Quang, 16/07) — CE PROJET EST UN HOBBY, mené au rythme choisi : la mise en
       // place vient d'abord, le marketing plus tard, s'il vient. Un produit en `repos` n'a PAS d'objectif
@@ -1010,8 +1033,27 @@
 
     // P2 — Home : fetch léger des agrégats publics (mêmes compteurs que la vue Acquisition).
     // Les données produit (MRR, actifs) restent token-gated → branchées au lot P3 via state.cache.
+    // v2.55.0 (07/11/2026, maquette v0.3 validée par Quang) — l'accueil CHARGE LUI-MÊME les vues produit, avec les
+    // MÊMES fonctions que les onglets (chiffres identiques partout). Avant, il ne lisait que les caches des onglets
+    // déjà ouverts : « — » partout et « Alertes 0 · rien à signaler » en vert tant qu'on ne les avait pas visités.
+    // Garde-fou §4 de la roadmap (« ne pas exposer les données payantes SANS token ») respecté à la lettre : un
+    // produit n'est chargé QUE si son jeton est présent (injecté par se7enai-dash derrière Cloudflare Access) ;
+    // sur le github.io public, sans jeton, rien n'est appelé et l'accueil affiche « — ».
+    // Un produit en échec garde son cache précédent (l'accueil ne vide jamais une tuile sur une panne passagère).
+    const HOME_PRODUCTS = ['dk', 'swp', 'sv', 'dkpc'];
     async function fetchHome(signal) {
-      return { acq: await fetchAcq(signal) };
+      const acqP = fetchAcq(signal);
+      const prods = HOME_PRODUCTS.map(async key => {
+        const cfg = getApp(key);
+        if (cfg.auth === 'token' && !getToken(cfg)) return;
+        try {
+          const d = await fetchApp(cfg, signal);
+          state.cache.set(key, d); state.loadedAt.set(key, new Date()); state.error.delete(key); persistCache(key, d);
+        } catch (e) { if (e && e.name === 'AbortError') throw e; }
+      });
+      const acq = await acqP;
+      await Promise.all(prods);
+      return { acq };
     }
 
     // Moteur générique : les endpoints vides ne déclenchent aucun fetch (vues non encore branchées).
@@ -1117,7 +1159,7 @@
       const [label, color] = freshState(at);
       const age = Date.now() - at.getTime();
       const tone = age > 86400000 ? 'perime' : age > 21600000 ? 'vieillit' : 'frais';
-      return `<button class="freshbar" type="button" data-refresh="${app.key}" data-fresh="${tone}" style="--fresh-color:${color}" title="Actualiser cette vue"><span class="fresh-dot" aria-hidden="true"></span><span><strong>${label}</strong> · données ${app.auth === 'token' ? 'protégées' : 'publiques'} · actualisées le <strong>${formatDate(at)}</strong> (${relativeTime(at)})</span><span class="fresh-action">↻ Actualiser</span></button>`;
+      return `<button class="freshbar" type="button" data-refresh="${app.key}" data-fresh="${tone}" style="--fresh-color:${color}" title="Actualiser cette vue"><span class="fresh-dot" aria-hidden="true"></span><span><strong>${label}</strong> · données ${app.auth === 'token' ? 'protégées' : app.key === 'home' ? (HOME_PRODUCTS.some(k => getToken(getApp(k))) ? 'protégées et publiques' : 'publiques seulement') : 'publiques'} · actualisées le <strong>${formatDate(at)}</strong> (${relativeTime(at)})</span><span class="fresh-action">↻ Actualiser</span></button>`;
     }
 
     // === P1 — Acquisition (parité stricte avec index.html v1.23.0, formules identiques) ===
@@ -1453,6 +1495,28 @@
       return { devicesList, tierCounts, phantomCount, premiumRuntimeCount,
                effectiveFree: tierCounts.free - premiumRuntimeCount,
                totalPremium: tierCounts.premium + premiumRuntimeCount, newDevicesToday };
+    }
+
+    // v2.55.0 — « Semaine de bienvenue » : copie EXACTE de la règle de la passerelle
+    // (dictokey/gateway/src/semaine_bienvenue.js, limiteDuJour + enSemaineBienvenue, v1.17.2 — relue le 07/11/2026) :
+    //   mode 'on' (tous) ou 'test' (seuls les appareils listés) · offre 'free' · deviceId sans préfixe 'pc_' ·
+    //   créé il y a moins de 7 jours UTC (âge mesuré au DÉBUT de la journée UTC ; jour de création = J1).
+    // L'offre retenue est `effectiveTier` = offre réellement appliquée à la DERNIÈRE requête (updateLastSeen,
+    // même calcul que la limite, index.js:1088), à défaut `tier`. Renvoie le numéro de jour 1..7, ou 0.
+    // ⚠ Si la passerelle change cette règle, ce bloc doit suivre : il ne fait qu'en reproduire le résultat.
+    function dkBienvenueJour(d, bienv) {
+      const cfg = bienv && bienv.config;
+      const mode = cfg && cfg.mode;
+      if (mode !== 'on' && mode !== 'test') return 0;
+      const id = (d && d.deviceId) || '';
+      if (!id || id.startsWith('pc_')) return 0;
+      if ((d.effectiveTier || d.tier || 'free') !== 'free') return 0;
+      if (mode === 'test' && !(Array.isArray(cfg.test) && cfg.test.includes(id))) return 0;
+      if (!/^\d{4}-\d{2}-\d{2}T/.test(d.createdAt || '')) return 0;
+      const JOUR = 86400000;
+      const debutCreation = Math.floor(Date.parse(d.createdAt) / JOUR) * JOUR;
+      const ecart = Math.round((Math.floor(Date.now() / JOUR) * JOUR - debutCreation) / JOUR);
+      return ecart >= 0 && ecart < 7 ? ecart + 1 : 0;
     }
 
     // === P3b3 — Charts (Chart.js) ===
@@ -3379,67 +3443,128 @@
       const items = family => APPS.filter(app => app.family === family).map(app => `<button class="nav-item" type="button" data-route="${app.key}" ${app.key === state.activeKey ? 'aria-current="page"' : ''}><span class="nav-icon" aria-hidden="true">${app.icon}</span><span>${safeText(app.name)}</span>${app.color ? `<span class="product-dot" style="--product-color:${app.color}" aria-hidden="true"></span>` : ''}</button>`).join('');
       nav.innerHTML = `${items('home')}${Object.keys(FAMILY_LABELS).map(key => `<div class="nav-group">${FAMILY_LABELS[key]}</div>${items(key)}`).join('')}`;
     }
+    // v2.55.0 (07/11/2026) — Vue d'ensemble refaite d'après la maquette v0.3 validée par Quang
+    // (dashboard-refonte/MOCKUP-v0.3-reorganisation.html). Les produits sont chargés par fetchHome (jetons présents).
+    // Règles tenues ici, toutes vérifiées dans le code des onglets le 07/11 :
+    //  · on n'ADDITIONNE que des chiffres de même nature et de même période ; le reste est nommé en note ;
+    //  · « payants » = la définition EXACTE de chaque onglet (Google pour DictoKey, Polar confirmé pour SWP,
+    //    `payant` de la passerelle pour DictoKey PC) — jamais un compte d'appareils « premium » (essais compris) ;
+    //  · aucun revenu DictoKey en euros : aucune API ne le donne en direct (enquête du 18/07 : « 18 premium × prix »
+    //    se trompait d'un facteur ~45, les essais gratuits étant des abonnements actifs) ;
+    //  · « actifs aujourd'hui » = DictoKey MOBILE (by_platform.mobile, comme l'onglet). On montre « hier : N » et non
+    //    un pourcentage : la journée en cours est incomplète, un % contre la veille complète baisse tous les soirs.
+    function homeProduitsData() {
+      const dk = state.cache.get('dk'), swpC = state.cache.get('swp'), dkpcC = state.cache.get('dkpc');
+      const out = { dk: null, swp: null, dkpc: null, sv: homeSvStats() };
+      if (dk && dk.mon) {
+        const daily = (dk.mon.dau && dk.mon.dau.daily) || [];
+        const mob = i => (daily[i] && daily[i].by_platform && daily[i].by_platform.mobile) || 0;
+        const sg = dk.mon.subscriptions_google;
+        const devs = ((dk.dev && dk.dev.devices) || []).filter(d => !(d.deviceId || '').toLowerCase().startsWith('pc_'));
+        const depuis7 = Date.now() - 7 * 86400000;
+        const nouveaux = devs.filter(d => { const t = Date.parse(d.createdAt || ''); return !isNaN(t) && t >= depuis7; });
+        const ecm = (dk.stats && dk.stats.stats && dk.stats.stats.estimated_cost_month) || {};
+        out.dk = {
+          actifs: daily.length ? mob(0) : null, hier: daily.length > 1 ? mob(1) : null,
+          abonnes: (sg && sg.ok) ? sg.active : null, abonnesAu: (sg && sg.ok) ? sg.as_of : null,
+          nouveaux7: nouveaux.length, bienvenue: devs.filter(d => dkBienvenueJour(d, dk.bienv) > 0).length,
+          bienvenueMode: (dk.bienv && dk.bienv.config && dk.bienv.config.mode) || null,
+          cout: ecm.total || null
+        };
+      }
+      const swpList = (swpC && swpC.overview && swpC.overview.customers_list) || null;
+      if (swpList) {
+        const real = swpList.filter(c => !swpIsTest(c.email));
+        out.swp = {
+          payants: real.filter(c => c.plan === 'pro' && !c.revoked && c.lsStatus === 'active' && !c.lsStatusAssumed).length,
+          enCours: real.filter(c => !c.revoked).length
+        };
+      }
+      const lic = dkpcC && dkpcC.licences && dkpcC.licences.licences;
+      if (Array.isArray(lic)) {
+        const tot = (dkpcC.usage && dkpcC.usage.total) || null;
+        out.dkpc = { payants: lic.filter(l => l.payant).length, actifs30: tot ? (tot.appareilsUniques || 0) : null,
+                     jours: (dkpcC.usage && dkpcC.usage.jours) || 30 };
+      }
+      return out;
+    }
     function renderHome(data) {
       const acq = (data && data.acq) || null;
-      const t = acqTotals(acq);
-      const swp = homeSwpStats(), sv = homeSvStats(), dk = homeDkStats();
-      const alerts = homeAlerts(acq, swp, sv, dk);
-      const products = APPS.filter(app => app.family === 'products');
+      const p = homeProduitsData();
+      const swpH = homeSwpStats(), svH = homeSvStats(), dkH = homeDkStats();
+      const alerts = homeAlerts(acq, swpH, svH, dkH);
+      const fmtJM = iso => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso)) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '?';
+      const dash = '—';
 
-      // --- Revenu des abonnements. ⚠ CE N'EST PAS UN « MRR TOTAL » — la tuile s'appelait ainsi (héritée du
-      // mock-up) alors qu'elle EXCLUT structurellement DictoKey, le produit principal. Un « total » qui omet
-      // le plus gros poste n'est pas un total : le titre porte désormais son périmètre réel.
-      //
-      // 🔍 ENQUÊTE DU 18/07 — pourquoi on ne complétera JAMAIS ce chiffre avec DictoKey :
-      //   · DictoKey Premium est bien un ABONNEMENT (BillingManager : ProductType.SUBS ×3, zéro INAPP,
-      //     zéro consumeAsync) à 4,99 €/mois ou 34,99 €/an — donc un MRR y serait conceptuellement légitime.
-      //   · MAIS le nombre d'abonnés PAYANTS n'est exposé par aucune API. La seule quantité disponible est
-      //     le compte d'appareils « premium » (18) — et il ne mesure PAS des payants : l'app marque premium
-      //     dès que Play signale un abonnement actif (BillingManager.kt:124), or un ESSAI GRATUIT DE 7 JOURS
-      //     est un abonnement actif. Les essais sont donc comptés comme des premium.
-      //   · L'arithmétique tranche : 18 × 4,99 = 89,82 €/mois, contre 24,38 € NETS CUMULÉS DEPUIS L'ORIGINE
-      //     (un unique abonnement annuel italien). Le « prix en dur × premium actifs » se tromperait d'un
-      //     facteur ~45. Ce n'est pas une approximation, c'est un faux.
-      //   · Vraie source = les rapports financiers Play (GCS). Testé le 18/07 : l'accès GCS FONCTIONNE
-      //     désormais (le zip est bien téléchargé — plus de 403, l'ACL a propagé depuis avril) ; il reste un
-      //     bug de dézippage dans `unzipSingleEntry` du gateway DictoKey. C'est le chemin d'un vrai KPI de
-      //     revenu, si Quang le veut — un lot en soi, pas une constante à inventer ici.
-      const subParts = [], subNote = [];
-      if (swp) { subParts.push(swp.mrr); subNote.push(`${swp.mrr} € SWP`); }
-      if (sv) { subParts.push(sv.revenue); subNote.push(`${svFmt(Math.round(sv.revenue * 100) / 100)} € StoryVoice`); }
-      const subVal = subParts.length ? `${svFmt(Math.round(subParts.reduce((a, b) => a + b, 0) * 100) / 100)} €` : '—';
-      const subSub = subParts.length
-        ? `${subNote.join(' + ')} · par mois · DictoKey non inclus (Play Console)`
-        : 'ouvre SubWhisper Pro / StoryVoice pour agréger';
+      // ── 4 chiffres transverses ──
+      const ab = [], abNote = [];
+      if (p.dk) { if (p.dk.abonnes !== null) { ab.push(p.dk.abonnes); abNote.push(`DictoKey ${p.dk.abonnes} (Google, au ${fmtJM(p.dk.abonnesAu)})`); } else abNote.push('DictoKey : rapport Google indisponible'); }
+      if (p.swp) { ab.push(p.swp.payants); abNote.push(`SWP ${p.swp.payants}`); }
+      if (p.dkpc) { ab.push(p.dkpc.payants); abNote.push(`PC ${p.dkpc.payants}`); }
+      const abVal = ab.length ? ab.reduce((a, b) => a + b, 0) : dash;
 
-      // --- Utilisateurs actifs : somme des « actifs » de chaque produit. Populations hétérogènes
-      // (DictoKey = appareils, SWP/SV = clients) → la composition est affichée en note, pas cachée.
-      const actParts = [], actNote = [];
-      if (dk) { actParts.push(dk.actives); actNote.push(`${dk.actives} appareils DictoKey`); }
-      if (swp) { actParts.push(swp.real); actNote.push(`${swp.real} clients SWP`); }
-      if (sv) { actParts.push(sv.real); actNote.push(`${sv.real} StoryVoice`); }
-      const actVal = actParts.length ? actParts.reduce((a, b) => a + b, 0) : '—';
-      const actSub = actParts.length ? actNote.join(' · ') : 'ouvre les vues produit pour agréger';
+      const actVal = (p.dk && p.dk.actifs !== null) ? p.dk.actifs : dash;
+      const actNote = [];
+      if (p.dk && p.dk.hier !== null) actNote.push(`DictoKey Android · hier ${p.dk.hier}`);
+      if (p.dkpc && p.dkpc.actifs30 !== null) actNote.push(`PC : ${p.dkpc.actifs30} sur ${p.dkpc.jours} j`);
+      if (p.swp) actNote.push(`SWP : ${p.swp.enCours} client${p.swp.enCours > 1 ? 's' : ''} en cours`);
 
-      // NB « Visites 7j » du mock-up n'est pas réalisable : le compteur public n'expose que total + today.
-      const hero = `<div class="kpi-grid">` +
-        KpiTile('Abonnements SWP + StoryVoice', subVal, subSub) +
-        KpiTile('Utilisateurs actifs', actVal, actSub) +
-        KpiTile('Visites sites', t ? t.visites : '—', t ? (t.today > 0 ? `+${t.today} aujourd’hui` : 'tous sites, cumul') : '—') +
-        KpiTile('Alertes', t ? alerts.length : '—', alerts.length ? 'à traiter' : 'rien à signaler') +
-        `</div>`;
-      const funnel = t
-        ? `<div class="funnel">${FunnelBar('Visites', t.visites, 100)}${FunnelBar('Engagement (hub)', t.engagement, t.visites ? Math.max(2, Math.round((t.engagement / t.visites) * 100)) : 0)}${FunnelBar(`Clics sortants — ${acqPct(t.sortants, t.visites)} de sortie`, t.sortants, t.visites ? Math.max(2, Math.round((t.sortants / t.visites) * 100)) : 0)}</div>`
-        : `<div class="funnel">${FunnelBar('Visites', '—', 100)}${FunnelBar('Engagement (hub)', '—', 0)}${FunnelBar('Clics sortants', '—', 0)}</div>`;
+      const nvVal = p.dk ? p.dk.nouveaux7 : dash;
+      const nvNote = p.dk
+        ? (p.dk.bienvenueMode === 'on' || p.dk.bienvenueMode === 'test'
+            ? `appareils DictoKey · ${p.dk.bienvenue} en semaine de bienvenue (100/j)`
+            : 'appareils DictoKey · semaine de bienvenue inactive')
+        : '';
+
+      const coutVal = (p.dk && p.dk.cout) ? p.dk.cout : dash;
+      const coutNote = p.dk ? 'DictoKey Android · estimation passerelle · détail : Moteurs' : '';
+
+      const vide = !p.dk && !p.swp && !p.dkpc;
+      const hero = `<div class="kpi-grid">`
+        + KpiTile('Abonnés payants', abVal, abNote.join(' · ') || 'jetons absents (page ouverte hors dash.se7enai.com ?)')
+        + KpiTile('Actifs aujourd’hui', actVal, actNote.join(' · ') || '')
+        + KpiTile('Nouveaux appareils 7 j', nvVal, nvNote)
+        + KpiTile('Coût du mois', coutVal, coutNote)
+        + `</div>`;
+
+      // ── À surveiller (juste sous les chiffres clés) ──
       const alertList = alerts.length
         ? alerts.map(a => Alert(a.level, a.title, a.message)).join('')
-        : Alert('ok', 'Rien à signaler', 'Aucune alerte sur les données disponibles. Les alertes produit n’apparaissent qu’après ouverture des vues concernées (la Home reste token-less).');
-      return `<section class="section">${hero}</section>` +
-        `<section class="section"><div class="section-head"><h2>Produits</h2><a href="#acq">Voir l’acquisition →</a></div><div class="product-grid">${products.map(app => ProductCard(app, acq)).join('')}</div></section>` +
-        `<section class="section"><div class="section-head"><h2>Acquisition — funnel global</h2><a href="#acq">Détail →</a></div>${funnel}</section>` +
-        `<section class="section"><div class="section-head"><h2>À surveiller</h2></div><div class="alert-list">${alertList}</div></section>` +
-        // v2.54.0 — sur la Vue d'ensemble (Quang ne trouvait pas le panneau rangé dans Studio).
-        `<section class="section"><div class="section-head"><h2>Chaînes YouTube</h2></div>${renderYtChannels()}</section>`;
+        : (vide
+            ? Alert('attention', 'Alertes produit non calculées', 'Les jetons ne sont pas présents (page ouverte hors dash.se7enai.com ?) : seules les données publiques sont lues.')
+            : Alert('ok', 'Rien à signaler', 'Alertes calculées sur les données chargées à l’instant.'));
+
+      // ── Produits : une ligne chacun ──
+      const visAuj = k => (acq && acq[k] && acq[k].visit) ? acqInt(acq[k].visit.today) : null;
+      const num = (v, sous) => `<span class="hr-num">${v === null || v === undefined ? dash : safeText(String(v))}${sous ? `<small>${safeText(sous)}</small>` : ''}</span>`;
+      const ligne = (route, couleur, nom, tag, c1, c2, c3, c4, repos) =>
+        `<a class="home-row${repos ? ' repos' : ''}" href="#${route}" style="--hr-color:${couleur}"><span class="hr-name"><i></i>${safeText(nom)}${tag ? ` <em>${safeText(tag)}</em>` : ''}</span>${c1}${c2}<span class="hr-hide">${c3}</span><span class="hr-hide">${c4}</span><span class="hr-chev">›</span></a>`;
+      const dlReal = acq && acq.se7 && acq.se7.dlReal;
+      const dlDelta = ondineDlDelta(dlReal);
+      const rows = [
+        `<div class="home-row th"><span>Produit</span><span>Utilisateurs</span><span>Payants</span><span class="hr-hide">Visites site auj.</span><span class="hr-hide">Évolution</span><span></span></div>`,
+        ligne('dk', 'var(--dk)', 'DictoKey', 'Android',
+          num(p.dk ? p.dk.actifs : null, 'auj.'), num(p.dk ? p.dk.abonnes : null, 'Google'),
+          num(visAuj('dk')), p.dk && p.dk.hier !== null ? `<span class="hr-num hr-flat">hier ${p.dk.hier}</span>` : num(null)),
+        ligne('dkpc', 'var(--dk)', 'DictoKey', 'PC',
+          num(p.dkpc ? p.dkpc.actifs30 : null, p.dkpc ? `${p.dkpc.jours} j` : ''), num(p.dkpc ? p.dkpc.payants : null, 'Polar'),
+          num(null), num(null)),
+        ligne('swp', 'var(--swp)', 'SubWhisper Pro', '',
+          num(p.swp ? p.swp.enCours : null, 'en cours'), num(p.swp ? p.swp.payants : null, 'Polar'),
+          num(visAuj('swp')), num(null)),
+        ligne('sv', 'var(--sv)', 'StoryVoice', 'repos',
+          num(p.sv ? p.sv.real : null, 'clients'), num(null), num(visAuj('sv')), num(null), true),
+        ligne('acq', 'var(--ondine)', 'Ondine', 'gratuit',
+          num(null), num(null), num(visAuj('se7'), 'hub'),
+          (dlReal && dlReal.ok)
+            ? `<span class="hr-num ${dlDelta && dlDelta.delta > 0 ? 'hr-up' : 'hr-flat'}">${dlDelta ? `${dlDelta.delta >= 0 ? '+' : ''}${dlDelta.delta}` : safeText(String(dlReal.publicTotal))}<small>${dlDelta ? `téléch. depuis le ${safeText(fmtJM(dlDelta.since))}` : 'téléchargements'}</small></span>`
+            : num(null))
+      ].join('');
+
+      return `<section class="section">${hero}</section>`
+        + `<section class="section"><div class="section-head"><h2>À surveiller</h2></div><div class="alert-list">${alertList}</div></section>`
+        + `<section class="section"><div class="section-head"><h2>Produits</h2><a href="#acq">Acquisition →</a></div><div class="home-table">${rows}</div></section>`
+        + `<section class="section"><div class="section-head"><h2>Chaînes YouTube</h2></div>${renderYtChannels()}</section>`;
     }
     function renderPlaceholder(app) { const tokenHint = app.auth === 'token' ? 'Cette vue restera token-gated au branchement des données.' : 'Cette vue utilisera uniquement ses données publiques au branchement.'; return `<section class="placeholder"><div class="placeholder-inner"><span class="placeholder-icon" aria-hidden="true">◌</span><h2>${safeText(app.name)} — vue prête au branchement</h2><p>${safeText(tokenHint)} Le socle P0 ne déclenche aucune requête réseau.</p></div></section><section class="section">${Panel(`architecture-${app.key}`, 'Contrat de données préparé', `<p>Config déclarative disponible dans <code>APPS[]</code> : authentification, endpoints et sections. Le rendu métier sera ajouté dans le lot dédié.</p>`, true)}</section>`; }
     // ── P4 / Factory — rendu ────────────────────────────────────────────────────
@@ -3603,15 +3728,16 @@
       const fmt = iso => iso.split('-').reverse().join('/');
       // + chaînes de projets ANONYMES injectées par le worker privé se7enai-dash (absentes de ce fichier public).
       const prive = Array.isArray(window.__YT_PRIVE) ? window.__YT_PRIVE : [];
-      const rows = YT_CHANNELS.concat(prive).map(c => {
+      // v2.55.0 — grille compacte (maquette v0.3) : un seul titre (celui de la section), texte aligné à gauche.
+      const cards = YT_CHANNELS.concat(prive).map(c => {
         const base = `https://www.youtube.com/channel/${encodeURIComponent(c.id)}`;
         const studio = `https://studio.youtube.com/channel/${encodeURIComponent(c.id)}/analytics/tab-overview/period-default`;
-        return `<div class="yt-row" style="--product-color:${c.color}"><div class="yt-head"><span class="product-dot" aria-hidden="true"></span><b>${safeText(c.app)}</b><span class="yt-handle">${safeText(c.handle)}</span><span class="yt-since">ouverte le ${safeText(fmt(c.opened))}</span></div>`
-          + `<div class="yt-links"><a href="${base}/videos" target="_blank" rel="noopener">▶ Chaîne</a><a href="${studio}" target="_blank" rel="noopener">📈 Statistiques (Studio)</a></div>`
-          + (c.decision ? `<div class="pf-note">🎯 Point de décision : ${safeText(c.decision)}</div>` : '')
+        return `<div class="yt-card" style="--yt-color:${safeText(c.color)}"><b>${safeText(c.app)}</b><span class="yt-handle">${safeText(c.handle)} · depuis le ${safeText(fmt(c.opened).slice(0, 5))}</span>`
+          + `<span class="yt-links"><a href="${base}/videos" target="_blank" rel="noopener">▶ Chaîne</a><a href="${studio}" target="_blank" rel="noopener">📈 Studio</a></span>`
+          + (c.decision ? `<span class="yt-dec">🎯 ${safeText(c.decision)}</span>` : '')
           + `</div>`;
       }).join('');
-      return Panel('studio-yt', '▶ Chaînes YouTube', `${rows}<p class="pf-note">Une chaîne par application. Chiffres dans YouTube Studio : ce bloc ne fait aucun relevé.</p>`, true);
+      return `<div class="yt-grid">${cards}</div>`;
     }
     // '20260630-1912' — chaîne compacte sans fuseau, affichée brute par la prod. Formatée ici, sans prétendre connaître le fuseau du collecteur.
     function studioFmtSnap(s) {
