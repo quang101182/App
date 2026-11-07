@@ -665,7 +665,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.53.0-youtube';
+    const VERSION = 'v2.54.0-youtube-accueil';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -3437,7 +3437,9 @@
       return `<section class="section">${hero}</section>` +
         `<section class="section"><div class="section-head"><h2>Produits</h2><a href="#acq">Voir l’acquisition →</a></div><div class="product-grid">${products.map(app => ProductCard(app, acq)).join('')}</div></section>` +
         `<section class="section"><div class="section-head"><h2>Acquisition — funnel global</h2><a href="#acq">Détail →</a></div>${funnel}</section>` +
-        `<section class="section"><div class="section-head"><h2>À surveiller</h2></div><div class="alert-list">${alertList}</div></section>`;
+        `<section class="section"><div class="section-head"><h2>À surveiller</h2></div><div class="alert-list">${alertList}</div></section>` +
+        // v2.54.0 — sur la Vue d'ensemble (Quang ne trouvait pas le panneau rangé dans Studio).
+        `<section class="section"><div class="section-head"><h2>Chaînes YouTube</h2></div>${renderYtChannels()}</section>`;
     }
     function renderPlaceholder(app) { const tokenHint = app.auth === 'token' ? 'Cette vue restera token-gated au branchement des données.' : 'Cette vue utilisera uniquement ses données publiques au branchement.'; return `<section class="placeholder"><div class="placeholder-inner"><span class="placeholder-icon" aria-hidden="true">◌</span><h2>${safeText(app.name)} — vue prête au branchement</h2><p>${safeText(tokenHint)} Le socle P0 ne déclenche aucune requête réseau.</p></div></section><section class="section">${Panel(`architecture-${app.key}`, 'Contrat de données préparé', `<p>Config déclarative disponible dans <code>APPS[]</code> : authentification, endpoints et sections. Le rendu métier sera ajouté dans le lot dédié.</p>`, true)}</section>`; }
     // ── P4 / Factory — rendu ────────────────────────────────────────────────────
@@ -3599,7 +3601,9 @@
     }
     function renderYtChannels() {
       const fmt = iso => iso.split('-').reverse().join('/');
-      const rows = YT_CHANNELS.map(c => {
+      // + chaînes de projets ANONYMES injectées par le worker privé se7enai-dash (absentes de ce fichier public).
+      const prive = Array.isArray(window.__YT_PRIVE) ? window.__YT_PRIVE : [];
+      const rows = YT_CHANNELS.concat(prive).map(c => {
         const base = `https://www.youtube.com/channel/${encodeURIComponent(c.id)}`;
         const studio = `https://studio.youtube.com/channel/${encodeURIComponent(c.id)}/analytics/tab-overview/period-default`;
         return `<div class="yt-row" style="--product-color:${c.color}"><div class="yt-head"><span class="product-dot" aria-hidden="true"></span><b>${safeText(c.app)}</b><span class="yt-handle">${safeText(c.handle)}</span><span class="yt-since">ouverte le ${safeText(fmt(c.opened))}</span></div>`
@@ -3689,7 +3693,7 @@
       const banner = (noneAhead && lastAll)
         ? `<div class="st-planning-bar"><span class="fb-ic">🎬</span><span>Aucune publication depuis le <b>${p2s(lastAll.getDate())}/${p2s(lastAll.getMonth() + 1)}/${lastAll.getFullYear()}</b> (${relativeTime(lastAll)}) et aucune de prévue — planning tenu à la main, dernière édition le ${suTxt}.</span></div>`
         : `<div class="st-planning-bar${suStale ? ' stale' : ''}"><span class="fb-ic">🎬</span><span>Planning tenu à la main — dernière édition le <b>${suTxt}</b> (${relativeTime(su)})${suStale ? ' — <b>périmé (&gt; 3 j)</b>' : ''}</span></div>`;
-      return `${banner}<div class="st-stats kpi-grid">${KpiTile('Prochain', nextTxt, upcoming.length ? 'post visible le plus proche' : 'aucun post à venir')}${KpiTile('7 prochains jours', wk, 'fenêtre glissante, pas la semaine calendaire')}${KpiTile('À venir', upcoming.length, 'après filtres')}</div>${renderYtChannels()}${renderStudioPerf(data)}${Panel('studio-lanes', '📡 Stratégie par canal', `<div class="st-lane">${lanes}</div>${pauseNote}`, true)}${fbar}<div class="st-agenda">${agenda}</div><p class="st-foot">Planning éditorial — les chiffres des plateformes viennent du seul rollup TikTok ci-dessus.</p>`;
+      return `${banner}<div class="st-stats kpi-grid">${KpiTile('Prochain', nextTxt, upcoming.length ? 'post visible le plus proche' : 'aucun post à venir')}${KpiTile('7 prochains jours', wk, 'fenêtre glissante, pas la semaine calendaire')}${KpiTile('À venir', upcoming.length, 'après filtres')}</div>${renderStudioPerf(data)}${Panel('studio-lanes', '📡 Stratégie par canal', `<div class="st-lane">${lanes}</div>${pauseNote}`, true)}${fbar}<div class="st-agenda">${agenda}</div><p class="st-foot">Planning éditorial — les chiffres des plateformes viennent du seul rollup TikTok ci-dessus.</p>`;
     }
 
     function renderApp(app, data) {

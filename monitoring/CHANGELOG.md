@@ -6,6 +6,14 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.54.0-youtube-accueil — 07/11/2026 · Chaînes YouTube sur la Vue d'ensemble
+
+- Le panneau « ▶ Chaînes YouTube » passe de l'onglet Studio à la **Vue d'ensemble** (Quang ne le trouvait pas).
+- Il ajoute les chaînes de projets anonymes injectées par le worker privé `se7enai-dash` (`window.__YT_PRIVE`) :
+  leur nom n'est jamais écrit dans ce fichier public. Sans worker (github.io), seule @DictoKey apparaît.
+
+---
+
 ## v2.53.0-youtube — 07/11/2026 · Studio : panneau « ▶ Chaînes YouTube »
 
 - Une ligne par chaîne (une chaîne par application, décision de Quang du 07/11) : lien vers la chaîne,
