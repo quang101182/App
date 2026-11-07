@@ -6,6 +6,22 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.58.0-auto — 07/11/2026 · Actualisation automatique + corrections du passage QA
+
+- **Interrupteur « Auto »** (menu sur PC, barre du haut sur téléphone), mémorisé par appareil, activé par défaut.
+  En entrant dans une page : derniers chiffres affichés tout de suite ; s'ils ont plus de 5 min, mise à jour en
+  arrière-plan (« ↻ actualisation… », jamais d'écran de chargement) ; page visible → vérification chaque minute ;
+  retour sur l'onglet → mise à jour si besoin. Coupé : seul « Actualiser » recharge. Moteurs & coûts non concerné.
+- Une mise à jour en arrière-plan qui échoue garde les chiffres (« ⚠ mise à jour échouée ») au lieu de vider l'écran.
+- Corrige : un chargement lent pouvait s'afficher par-dessus la page où l'on venait d'aller. L'accueil est mémorisé.
+- QA (agent indépendant, v2.57.0) : menu ☰ refermable (Échap, « ✕ Fermer », page figée derrière) ; dates « Créé »
+  sur une ligne ; Ondine lisible sur téléphone ; fantômes signalés dans les statuts ; taux de clic et coût du mois
+  expliqués à l'écran ; libellés Factory et chevrons alignés ; message GA4 réduit à une ligne.
+- Bancs : 9 scénarios de comportement (0 appel si récent / 1 si vieux / 0 si coupé / course / panne / visibilité)
+  + 18 vues : tout vert.
+
+---
+
 ## v2.57.0-menu — 07/11/2026 · Menu réorganisé, archives, finitions téléphone
 
 - Menu (maquette v0.3) : DictoKey PC rangé **sous** DictoKey ; StoryVoice étiqueté « repos » ; « Audience » ;
