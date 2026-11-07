@@ -658,7 +658,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.50.0-revue-statuts';
+    const VERSION = 'v2.51.0-bienvenue';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1371,7 +1371,7 @@
       const headers = { Authorization: `Bearer ${getToken(cfg)}` };
       const j = async url => { const r = await fetch(url, { signal, headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); };
       const pub = (url, fallback) => fetch(url, { signal }).then(r => r.json()).catch(() => fallback);
-      const [mon, stats, dev, visit, click, play, fb, src, fun] = await Promise.all([
+      const [mon, stats, dev, visit, click, play, fb, src, fun, bienv] = await Promise.all([
         j(`${DK_GATEWAY}/admin/monitoring?period=${DK_PERIOD}&advanced=1`),
         j(`${DK_GATEWAY}/admin/stats`),
         j(`${DK_GATEWAY}/admin/devices`),
@@ -1383,9 +1383,10 @@
         j(`${DK_GATEWAY}/admin/playstore-stats`).catch(() => null),
         j(`${DK_GATEWAY}/admin/firebase-stats?period=7d`).catch(() => null),   // toléré (cache KV 1h, données J-1)
         j(`${DK_GATEWAY}/admin/source-split`).catch(() => null),   // v2.45.0 : bulle / clavier / les deux (gateway v1.8.0)
-        j(`${DK_GATEWAY}/admin/funnel?days=28`).catch(() => null)   // v2.46.0 : nouvel accueil de l'app v2.74.0 (gateway v1.11.0)
+        j(`${DK_GATEWAY}/admin/funnel?days=28`).catch(() => null),   // v2.46.0 : nouvel accueil de l'app v2.74.0 (gateway v1.11.0)
+        j(`${DK_GATEWAY}/admin/bienvenue?days=14`).catch(() => null)   // v2.51.0 : semaine de bienvenue (gateway v1.17.0)
       ]);
-      return { mon, stats, dev, visit, click, play, fb, src, fun };
+      return { mon, stats, dev, visit, click, play, fb, src, fun, bienv };
     }
 
     function dkPctChange(today, yesterday) {
@@ -1665,6 +1666,57 @@
       return `<div class="fb-grid">${bloc('accueil_essai', '🎙 Essai de dictée')}${bloc('accueil_bulle', '🫧 Chemin bulle')}`
         + `${bloc('accueil_clavier', '⌨ Chemin clavier')}</div>`
         + `<div class="lg-row" style="opacity:.6;font-size:12px">${fun.days || 28} jours · utilisateurs par étape, dans l’ordre · % = part de ceux qui ont commencé le nouvel accueil (installations : toutes versions, pour mémoire) · données J-1 (cache 1 h)</div>`;
+    }
+
+    // v2.51.0 (07/11/2026) — LE vrai indicateur d'activation : installation → 1re dictée, sans étape intermédiaire
+    // (entonnoir premiere_dictee de /admin/funnel, gateway v1.17.1). La 1re dictée a souvent lieu PENDANT l'accueil :
+    // l'entonnoir à 3 étapes la perdait (11 contre 29 au bilan du 07/11). Ventilé par canal ; ligne RESERVED_TOTAL = total.
+    function renderDkPremiereDictee(fun) {
+      const f = fun && fun.funnels && fun.funnels.premiere_dictee;
+      if (!f) return `<div class="no-data">⏳ Entonnoir « premiere_dictee » indisponible (passerelle ≥ 1.17.1)</div>`;
+      if (f.error) return `<div class="no-data">⚠ ${safeText(f.error)}</div>`;
+      const par = {};
+      (f.rows || []).forEach(r => { const m = /^(\d+)\.\s/.exec(r.step || ''); if (!m) return;
+        const c = r.breakdown || 'RESERVED_TOTAL'; (par[c] = par[c] || [0, 0])[Number(m[1]) - 1] = r.users || 0; });
+      const tot = par.RESERVED_TOTAL || [0, 0];
+      if (!tot[0]) return `<div class="no-data">⏳ Pas encore de donnée</div>`;
+      const LIB = { 'Organic Search': 'Recherche Play (naturel)', Direct: 'Direct', 'Cross-network': 'Cross-network (Google)',
+        Unassigned: 'Non attribué', 'Paid Other': 'Pub (autre)', 'Paid Search': 'Pub Recherche Google', Referral: 'Site référent' };
+      const ligne = (lib, v) => `<div class="step"><div class="step-head"><span>${safeText(lib)}</span>`
+        + `<b>${dkNum(v[1])} / ${dkNum(v[0])} · ${dkPct(v[1], v[0])} %</b></div>`
+        + `<div class="step-bar"><i style="width:${Math.max(2, Math.min(100, v[0] > 0 ? v[1] / v[0] * 100 : 0))}%"></i></div></div>`;
+      const canaux = Object.keys(par).filter(c => c !== 'RESERVED_TOTAL').sort((a, b) => par[b][0] - par[a][0]);
+      return `<div class="fb-card"><div class="chart-title">Installations qui font une 1ʳᵉ vraie dictée</div>${ligne('Total', tot)}`
+        + canaux.map(c => ligne(LIB[c] || c, par[c])).join('') + `</div>`
+        + `<div class="lg-row" style="opacity:.6;font-size:12px">${fun.days || 28} jours · 1ʳᵉ dictée / installations, par canal d’arrivée · un canal sous 10 installations ne donne pas un taux fiable · robots et build dev exclus · données J-1 (cache 1 h)</div>`;
+    }
+
+    // v2.51.0 (07/11/2026) — Semaine de bienvenue (gateway v1.17.0) : 100 dictées/jour les 7 premiers jours d'un gratuit.
+    // Source : GET /admin/bienvenue?days=14 → { config:{mode,test[]}, depuis, refus:[{jour,deviceId,tier,limite,bienvenue,n}],
+    // ombre:[{jour,deviceId,n}] }. Journaux tenus depuis le 07/11/2026 seulement (avant : rien n'était noté).
+    // ⛔ Un refus avec bienvenue:true et une limite < 100 = BUG (la semaine de bienvenue n'a pas été appliquée).
+    function renderDkBienvenue(b) {
+      if (!b || !b.config) return `<div class="no-data">⏳ Route /admin/bienvenue indisponible (passerelle ≥ 1.17.0)</div>`;
+      const MODE = { off: ['Éteinte', '#94a3b8', 'comportement d’avant : 30 dictées/jour pour tous les gratuits'],
+        ombre: ['Ombre', '#f59e0b', 'rien ne change pour les utilisateurs : on note seulement les refus qu’elle aurait évités'],
+        test: ['Test', '#3b82f6', `active pour ${(b.config.test || []).length} appareil(s) de test, ombre pour les autres`],
+        on: ['Active', '#10b981', 'active pour tous les nouveaux gratuits'] }[b.config.mode] || ['?', '#94a3b8', ''];
+      const refus = b.refus || [], ombre = b.ombre || [];
+      const bugs = refus.filter(r => r.bienvenue && Number(r.limite) < 100);
+      const jours = {};
+      const add = j => { const d = jours[j] = jours[j] || { refusApp: new Set(), refusN: 0, bienvApp: new Set(), ombreApp: new Set(), ombreN: 0 }; return d; };
+      refus.forEach(r => { const d = add(r.jour); d.refusApp.add(r.deviceId); d.refusN += Number(r.n) || 0; if (r.bienvenue) d.bienvApp.add(r.deviceId); });
+      ombre.forEach(o => { const d = add(o.jour); d.ombreApp.add(o.deviceId); d.ombreN += Number(o.n) || 0; });
+      const tete = `<div class="sm">Interrupteur : <b style="color:${MODE[1]}">${MODE[0]}</b> — ${safeText(MODE[2])}</div>`
+        + (bugs.length ? `<div class="sm" style="color:#ef4444"><b>⛔ ${bugs.length} refus d’un appareil en bienvenue sous 100 : BUG</b> (${bugs.slice(0, 3).map(r => `${safeText(r.jour)} · ${safeText(String(r.deviceId).slice(0, 8))} · limite ${safeText(String(r.limite))}`).join(' ; ')})</div>` : '');
+      const lj = Object.keys(jours).sort().reverse();
+      if (!lj.length) return tete + `<div class="no-data">Aucun refus « limite du jour » noté depuis le ${safeText(b.depuis || '?')} (journal tenu depuis le 07/11/2026)</div>`;
+      const lignes = lj.map(j => { const d = jours[j];
+        return `<div class="sm">• <b>${safeText(j.slice(8, 10) + '/' + j.slice(5, 7))}</b> : ${dkNum(d.refusApp.size)} appareil(s) refusé(s) à la limite (${dkNum(d.refusN)} refus)`
+          + (d.bienvApp.size ? `, dont ${dkNum(d.bienvApp.size)} en bienvenue` : '')
+          + (d.ombreApp.size ? ` · <span style="color:#f59e0b">${dkNum(d.ombreApp.size)} appareil(s) auraient passé avec la bienvenue (${dkNum(d.ombreN)} refus évitables)</span>` : '')
+          + `</div>`; }).join('');
+      return tete + lignes + `<div class="lg-row" style="opacity:.6;font-size:12px">14 jours · refus = réponse 429 « limite du jour atteinte » · évitables = mode ombre, appareil de moins de 7 jours refusé à 30 · journée UTC</div>`;
     }
 
     // v2.46.0 — Usage des fonctions (événement feature_used, app v2.74.0). Source : /admin/firebase-stats
@@ -2804,7 +2856,7 @@
 
     function renderDkView(payload) {
       if (!payload || !payload.mon) return EmptyState('DictoKey', 'Aucune donnée reçue du gateway.');
-      const { mon, stats, dev, visit, click, play, fb, src, fun } = payload;
+      const { mon, stats, dev, visit, click, play, fb, src, fun, bienv } = payload;
       const ds = dkDeviceStats(dev);
       // Devices triés par lastSeen desc (comme la prod). Les filtres/la page sont conservés entre les rendus.
       dkDevState.all = ds.devicesList.slice().sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
@@ -2956,6 +3008,8 @@
         + `<section class="section">${Panel('dk-activity', '📈 Activité', activity, true)}</section>`
         + `<section class="section">${Panel('dk-source', '🫧⌨ Bulle ou clavier ?', renderDkSourceSplit(src), true)}</section>`
         + `<section class="section">${Panel('dk-accueil', '🚪 Nouvel accueil (app 2.75)', renderDkAccueil(fun), true)}</section>`
+        + `<section class="section">${Panel('dk-premiere', '🎯 Activation : 1ʳᵉ dictée', renderDkPremiereDictee(fun), true)}</section>`
+        + `<section class="section">${Panel('dk-bienv', '🎁 Semaine de bienvenue (gratuits)', renderDkBienvenue(bienv), true)}</section>`
         + `<section class="section">${Panel('dk-usage', '🧰 Usage des fonctions', renderDkUsage(fb), false)}</section>`
         + `<section class="section">${Panel('dk-perf', '⚡ Performance API', perf, false)}</section>`
         + `<section class="section">${Panel('dk-split', '🌍 Répartition', donuts, false)}</section>`

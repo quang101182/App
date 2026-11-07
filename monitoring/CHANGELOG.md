@@ -6,6 +6,19 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.51.0-bienvenue — 07/11/2026 · DictoKey : activation réelle et semaine de bienvenue
+
+Deux cartes ajoutées à l'onglet DictoKey (passerelle 1.17.x, app 2.77.0 en examen production) :
+- **🎯 Activation : 1ʳᵉ dictée** — entonnoir `premiere_dictee` de `/admin/funnel` (installation → 1ʳᵉ vraie
+  dictée, sans étape intermédiaire), total et par canal. Au 07/11 sur 28 jours : 54 / 144 = 38 %.
+- **🎁 Semaine de bienvenue (gratuits)** — `GET /admin/bienvenue?days=14` : état de l'interrupteur
+  (éteinte / ombre / test / active), refus « limite du jour » (429) par jour, refus évités en mode ombre.
+  ⛔ Un refus d'appareil en bienvenue sous 100 s'affiche en rouge (BUG). Journal tenu depuis le 07/11.
+
+Banc : `test_dk_tab.py` (Edge headless, vraie passerelle, 360 px) → 12/12.
+
+---
+
 ## v2.50.0-revue-statuts — 03/11/2026 · Les statuts affichés ne suivaient plus les décisions
 
 Revue complète des 9 onglets (données réelles, origine `dash.se7enai.com` rejouée) : 0 erreur
