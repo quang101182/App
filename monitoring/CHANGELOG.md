@@ -6,6 +6,19 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.57.0-menu — 07/11/2026 · Menu réorganisé, archives, finitions téléphone
+
+- Menu (maquette v0.3) : DictoKey PC rangé **sous** DictoKey ; StoryVoice étiqueté « repos » ; « Audience » ;
+  « Moteurs & coûts » ; rubrique **Archives** pour Factory (arrêtée) et Studio (figé) — rien supprimé.
+- Pied du menu : la version (au lieu de « Monitoring v2 · P4 Ops (toutes vues portées) »).
+- Bandeau de fraîcheur : une seule ligne sur téléphone (110 → 40 px).
+- **Moteurs sur téléphone** : le bouton « Choisir » d'un moteur sortait de l'écran (tableau à défilement horizontal,
+  11 éléments hors cadre, défaut antérieur à cette session) → un moteur = une carte empilée.
+- Factory : 6 tuiles débordaient de leur carte sur PC → 0.
+- Banc : 18 vues (9 onglets × PC/360 px) avec données réelles : 0 erreur, 0 élément coupé.
+
+---
+
 ## v2.56.0-dictokey — 07/11/2026 · Onglet DictoKey réorganisé + statut des gratuits
 
 - **17 panneaux → 9** (maquette v0.3) : Activation, Usage (ouverts) ; Abonnements & offres, Rétention, Play Store,
