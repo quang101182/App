@@ -69,7 +69,11 @@ try:
     t("carte 1re dictee : un total chiffre", "Total" in txt[i:i + 400] and "%" in txt[i:i + 400])
     t("carte bienvenue rendue", "Semaine de bienvenue (gratuits)" in txt and "Interrupteur" in txt, txt[:200])
     j = txt.find("Interrupteur :", txt.find("Semaine de bienvenue (gratuits)")); print("  (info)", txt[j:j + 260].replace("\n", " "))
-    t("interrupteur lu = Ombre (etat reel au 07/11)", "Ombre" in txt[j:j + 60], txt[j:j + 80])
+    reel = json.load(urllib.request.urlopen(urllib.request.Request(
+        "https://api-gateway-dictokey.quang101182.workers.dev/admin/bienvenue?days=1",
+        headers={"Authorization": f"Bearer {admin}", "User-Agent": "Mozilla/5.0"})))["config"]["mode"]
+    attendu = {"off": "Éteinte", "ombre": "Ombre", "test": "Test", "on": "Active"}[reel]
+    t(f"interrupteur affiche = etat reel de la passerelle ({reel} -> {attendu})", attendu in txt[j:j + 60], txt[j:j + 80])
     t("aucun BUG signale sur les vraies donnees", "BUG" not in txt[j:j + 2000])
     t("les autres cartes restent rendues (accueil)", "Nouvel accueil (app 2.75)" in txt)
     t("jeton absent du DOM", admin not in (ev("document.documentElement.outerHTML") or ""))
