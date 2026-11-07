@@ -1,4 +1,6 @@
 # HANDOFF — App/monitoring
+
+> 🧭 **07/11/2026 — état courant et RESTANT (avec déclencheurs)** : en tête de `D:/Download/02-Apps-Web/dashboard-refonte/DASHBOARD-REFONTE-ROADMAP.md` ; historique des versions : `CHANGELOG.md` (v2.55.0 → v2.60.0 le 07/11). Liste des liens : `data/liens.json` = source unique, lue aussi par `/apps` du bot Telegram.
 Lot: R13 · 18 juillet 2026 · Claude (Opus 4.8) → 🏁 **REFONTE TERMINÉE — P0 à P6 tous livrés.** Bascule 16/07, surveillance 48 h, ancien archivé 18/07, P6 hygiène 18/07 (v2.15.0-p6). **Plus aucun lot en cours** ; restent 2 décisions produit pour Quang (MRR DictoKey · `Visite→vente` Factory).
 
 ## 🚨 BASCULE FAITE le 16/07/2026 — `dash.se7enai.com` sert `monitoring-v2.html` (**v2.15.0-p6** en ligne)
