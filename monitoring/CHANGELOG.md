@@ -6,6 +6,15 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.58.2-menu — 07/11/2026 · Menu : rubriques nettement séparées
+
+- Demande de Quang (capture) : chaque rubrique (Produits, Audience, Ops, Archives) devient une bande grise pleine
+  largeur avec un espace avant ; entrées en gris doux (graisse allégée) ; seule la page active ressort.
+- Le 429 « passerelle DictoKey PC » du bloc Coût venait de la passerelle (quota admin 60/h par IP qui comptait
+  aussi les appels authentifiés, épuisé par les bancs du 07/11) : corrigé côté passerelle PC v0.17.2.
+
+---
+
 ## v2.58.1-auto — 07/11/2026 · Interrupteur mieux présenté, Moteurs & coûts actualisé
 
 - PC : l'interrupteur quitte la ligne du logo (il y passait à la ligne, capture de Quang) pour une vraie ligne de
