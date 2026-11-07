@@ -6,6 +6,16 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.59.0-cout — 07/11/2026 · Un seul coût du mois DictoKey (le juste)
+
+- Décision « au plus pragmatique » (Quang) : dictées au **coût réel par moteur** (`/admin/stt-cout`, app `dk`, mois
+  heure de Paris — même source que Moteurs & coûts) + LLM + traduction de `/admin/stats`. L'ancienne estimation
+  imputait les dictées au tarif Groq alors que MAI tourne à 100 % (0,82 $ affichés contre 0,96 $ réels) : elle ne
+  sert plus que de repli, signalé. Tuile DictoKey, en-tête et barres du panneau Infra, accueil : même calcul
+  (`dkCoutMois`), format « 1,17 $ » comme Moteurs. Recoupé par un calcul Python indépendant : 1,17 $ identique.
+
+---
+
 ## v2.58.2-menu — 07/11/2026 · Menu : rubriques nettement séparées
 
 - Demande de Quang (capture) : chaque rubrique (Produits, Audience, Ops, Archives) devient une bande grise pleine

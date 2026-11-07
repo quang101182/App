@@ -743,7 +743,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.58.2-menu';
+    const VERSION = 'v2.59.0-cout';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Toutes les apps en un coup d’œil, chargées à l’ouverture.', sections: [] },
@@ -1503,7 +1503,7 @@
       const headers = { Authorization: `Bearer ${getToken(cfg)}` };
       const j = async url => { const r = await fetch(url, { signal, headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); };
       const pub = (url, fallback) => fetch(url, { signal }).then(r => r.json()).catch(() => fallback);
-      const [mon, stats, dev, visit, click, play, fb, src, fun, bienv] = await Promise.all([
+      const [mon, stats, dev, visit, click, play, fb, src, fun, bienv, cout] = await Promise.all([
         j(`${DK_GATEWAY}/admin/monitoring?period=${DK_PERIOD}&advanced=1`),
         j(`${DK_GATEWAY}/admin/stats`),
         j(`${DK_GATEWAY}/admin/devices`),
@@ -1516,9 +1516,10 @@
         j(`${DK_GATEWAY}/admin/firebase-stats?period=7d`).catch(() => null),   // toléré (cache KV 1h, données J-1)
         j(`${DK_GATEWAY}/admin/source-split`).catch(() => null),   // v2.45.0 : bulle / clavier / les deux (gateway v1.8.0)
         j(`${DK_GATEWAY}/admin/funnel?days=28`).catch(() => null),   // v2.46.0 : nouvel accueil de l'app v2.74.0 (gateway v1.11.0)
-        j(`${DK_GATEWAY}/admin/bienvenue?days=14`).catch(() => null)   // v2.51.0 : semaine de bienvenue (gateway v1.17.0)
+        j(`${DK_GATEWAY}/admin/bienvenue?days=14`).catch(() => null),   // v2.51.0 : semaine de bienvenue (gateway v1.17.0)
+        j(`${DK_GATEWAY}/admin/stt-cout`).catch(() => null)   // v2.59.0 : coût RÉEL des dictées par moteur (même source que Moteurs & coûts)
       ]);
-      return { mon, stats, dev, visit, click, play, fb, src, fun, bienv };
+      return { mon, stats, dev, visit, click, play, fb, src, fun, bienv, cout };
     }
 
     function dkPctChange(today, yesterday) {
@@ -1577,6 +1578,23 @@
     // L'offre retenue est `effectiveTier` = offre réellement appliquée à la DERNIÈRE requête (updateLastSeen,
     // même calcul que la limite, index.js:1088), à défaut `tier`. Renvoie le numéro de jour 1..7, ou 0.
     // ⚠ Si la passerelle change cette règle, ce bloc doit suivre : il ne fait qu'en reproduire le résultat.
+    // v2.59.0 (07/11/2026, « fais au plus pragmatique » — Quang) — coût du mois DictoKey Android, UNE seule méthode :
+    //   dictées = coût RÉEL par moteur (/admin/stt-cout, app `dk`, mois en cours heure de Paris : même source que
+    //   l'onglet Moteurs & coûts) ; LLM + traduction = estimation de /admin/stats (juste pour ces postes).
+    // L'ancienne estimation /admin/stats imputait toutes les dictées au tarif « Groq Whisper » alors que MAI tourne
+    // à 100 % : 0,82 $ affichés contre 0,96 $ réels le 07/11. Elle ne sert plus que de repli, et le dit.
+    function dkCoutMois(payload) {
+      const ecm = (payload && payload.stats && payload.stats.stats && payload.stats.stats.estimated_cost_month) || {};
+      const num = v => parseFloat(String(v || '0').replace('$', '').replace(',', '.')) || 0;
+      const llm = num(ecm.llm || ecm.groq_llm), trad = num(ecm.azure || ecm.azure_translate);
+      const c = payload && payload.cout, app = c && c.apps && c.apps.dk;
+      if (!app || !app.jours || !c.aujourdhui) return { repli: true, total: num(ecm.total), dictees: num(ecm.whisper || ecm.groq_whisper), llm, trad };
+      const mois = String(c.aujourdhui).slice(0, 7);
+      let dictees = 0;
+      for (const [jour, moteurs] of Object.entries(app.jours)) if (jour.startsWith(mois)) for (const v of Object.values(moteurs || {})) dictees += v.u || 0;
+      return { repli: false, total: dictees + llm + trad, dictees, llm, trad };
+    }
+    const dollarsFr = n => `${(Math.round(n * 100) / 100).toFixed(2).replace('.', ',')} $`;
     let dkBienvCourant = null;   // config de bienvenue du dernier chargement (lue par les lignes de la liste)
     // v2.56.0 — statut du jour de chaque appareil Android, demandé par Quang le 07/11 (« gratuit, 100 ou 30 ? »).
     // Offre = `effectiveTier` (appliquée à la DERNIÈRE requête), à défaut `tier`. « Premium » ici = appareils, pas
@@ -3086,7 +3104,7 @@
         + KpiTile('Abonnés Google', (sg && sg.ok) ? dkNum(sg.active) : '—', (sg && sg.ok) ? `rapport financier Google au ${fmtJM(sg.as_of)} · seuls vrais payants` : 'rapport Google indisponible')
         + KpiTile('Actifs aujourd’hui', dauToday, `hier ${dauYesterday}${dauSub ? ` · ${dauSub}` : ''} · ${heroVal} appareils actifs — ${heroSub}`)
         + KpiTile('Dictées aujourd’hui', today.transcriptions || 0, `+${today.rewrites || 0} réécr. +${today.corrections || 0} corr. +${today.translations || 0} trad.`)
-        + KpiTile('Coût du mois', ecm.total || '$0.00', `Whisper ${ecm.whisper || ecm.groq_whisper || '—'} · LLM ${ecm.llm || ecm.groq_llm || '—'} · Azure ${ecm.azure || ecm.azure_translate || '—'} · estimation`)
+        + (() => { const cm = dkCoutMois(payload); return KpiTile('Coût du mois', dollarsFr(cm.total), `dictées ${dollarsFr(cm.dictees)}${cm.repli ? ' (ancienne estimation : coût par moteur indisponible)' : ' (coût réel par moteur)'} · LLM ${dollarsFr(cm.llm)} · traduction ${dollarsFr(cm.trad)}`); })()
         + `</div>`;
 
       void heroTile;   // v2.56.0 : conservée pour mémoire du calcul ; affichée désormais en note des actifs
@@ -3152,10 +3170,12 @@
           + (mon.errors.recent || []).map(e => `<tr><td>${safeText(dkFmtDateTime(e.date || e.timestamp || e.ts))}</td><td>${safeText(e.endpoint || '—')}</td><td>${safeText(e.message || e.error || (e.status ? 'HTTP ' + e.status : '—'))}</td></tr>`).join('')
           + `</tbody></table></div><div class="acq-sub dk-sub2">Coûts estimés ce mois</div>` : `<div class="acq-sub">Coûts estimés ce mois</div>`;
       const parseCost = v => parseFloat(String(v || '0').replace('$', '')) || 0;
-      const costs = [{ label: 'Groq Whisper', value: parseCost(ecm.groq_whisper) }, { label: 'Groq LLM', value: parseCost(ecm.groq_llm) }, { label: 'Azure Translate', value: parseCost(ecm.azure_translate) }];
+      void parseCost;
+      const cmI = dkCoutMois(payload);   // v2.59.0 : même calcul que la tuile (dictées au coût réel par moteur)
+      const costs = [{ label: cmI.repli ? 'Dictées (ancienne estimation)' : 'Dictées (coût réel par moteur)', value: cmI.dictees }, { label: 'LLM (réécriture, correction)', value: cmI.llm }, { label: 'Traduction (Azure)', value: cmI.trad }];
       const maxCost = Math.max(...costs.map(c => c.value), 0.001);
-      const costBars = `<div class="cost-list">` + costs.map((c, i) => `<div class="cost-row"><span class="cost-label">${safeText(c.label)}</span><div class="cost-bar-bg"><i class="c${i}" style="width:${Math.max((c.value / maxCost) * 100, 2)}%"></i></div><span class="cost-amount">$${c.value.toFixed(2)}</span></div>`).join('')
-        + `</div><div class="cost-total">Total ce mois : $${parseCost(ecm.total).toFixed(2)}</div>`;
+      const costBars = `<div class="cost-list">` + costs.map((c, i) => `<div class="cost-row"><span class="cost-label">${safeText(c.label)}</span><div class="cost-bar-bg"><i class="c${i}" style="width:${Math.max((c.value / maxCost) * 100, 2)}%"></i></div><span class="cost-amount">${dollarsFr(c.value)}</span></div>`).join('')
+        + `</div><div class="cost-total">Total ce mois : ${dollarsFr(cmI.total)}</div>`;
 
       // --- Jauges de latence par endpoint (statut = couleur + mot, jamais la couleur seule)
       const latSummary = (mon.latency && mon.latency.summary) || {};
@@ -3191,7 +3211,7 @@
         + `<section class="section">${Panel('dk2-retention', '🔄 Rétention', renderDkAdvanced(mon.advanced), false, 'J1 · J7 · J30')}</section>`
         + `<section class="section">${Panel('dk2-play', '📥 Play Store', psHtml, false, playMeta)}</section>`
         + `<section class="section">${Panel('dk2-site', '🌐 Site & acquisition', siteFunnel + `<div class="acq-sub dk-sub2">Activation et sources (Firebase, J-1)</div>` + renderDkFirebase(fb), false, `clic vers Play ${rate.replace('.', ',')} %`)}</section>`
-        + `<section class="section">${Panel('dk2-infra', '🛠 Infra : erreurs, latence & coûts', errHtml + costBars + `<div class="acq-sub dk-sub2">Performance API</div>` + perf + `<div class="acq-sub dk-sub2">Langues et pays</div>` + donuts, false, `coût du mois ${ecm.total || '$0.00'}`)}</section>`
+        + `<section class="section">${Panel('dk2-infra', '🛠 Infra : erreurs, latence & coûts', errHtml + costBars + `<div class="acq-sub dk-sub2">Performance API</div>` + perf + `<div class="acq-sub dk-sub2">Langues et pays</div>` + donuts, false, `coût du mois ${dollarsFr(dkCoutMois(payload).total)}`)}</section>`
         + `<section class="section">${Panel('dk-devices', '📱 Appareils', dkRenderDevicesSection(ds), false, `${realCount} · recherche, détail par appareil`)}</section>`
         + `<section class="section">${Panel('dk2-archives', '🗄 Archives des expériences', renderDkAdoption(fb) + `<div class="acq-sub dk-sub2">Attribution install & signaux (v2.61.7)</div>` + renderDkAttribution(fb), false, 'refonte v2.61 · attribution v2.61.7')}</section>`;
     }
@@ -3565,13 +3585,13 @@
         const devs = ((dk.dev && dk.dev.devices) || []).filter(d => !(d.deviceId || '').toLowerCase().startsWith('pc_'));
         const depuis7 = Date.now() - 7 * 86400000;
         const nouveaux = devs.filter(d => { const t = Date.parse(d.createdAt || ''); return !isNaN(t) && t >= depuis7; });
-        const ecm = (dk.stats && dk.stats.stats && dk.stats.stats.estimated_cost_month) || {};
+        const cm = dkCoutMois(dk);
         out.dk = {
           actifs: daily.length ? mob(0) : null, hier: daily.length > 1 ? mob(1) : null,
           abonnes: (sg && sg.ok) ? sg.active : null, abonnesAu: (sg && sg.ok) ? sg.as_of : null,
           nouveaux7: nouveaux.length, bienvenue: devs.filter(d => dkBienvenueJour(d, dk.bienv) > 0).length,
           bienvenueMode: (dk.bienv && dk.bienv.config && dk.bienv.config.mode) || null,
-          cout: ecm.total || null
+          cout: cm.total, coutRepli: cm.repli
         };
       }
       const swpList = (swpC && swpC.overview && swpC.overview.customers_list) || null;
@@ -3618,8 +3638,8 @@
             : 'appareils DictoKey · semaine de bienvenue inactive')
         : '';
 
-      const coutVal = (p.dk && p.dk.cout) ? p.dk.cout : dash;
-      const coutNote = p.dk ? 'DictoKey Android · estimation globale de la passerelle (dictées + LLM + traduction) · le coût par moteur de transcription est dans « Moteurs & coûts »' : '';
+      const coutVal = (p.dk && p.dk.cout !== null) ? dollarsFr(p.dk.cout) : dash;
+      const coutNote = p.dk ? `DictoKey Android · dictées au coût réel par moteur + LLM + traduction${p.dk.coutRepli ? ' (repli : ancienne estimation)' : ''} · détail : Moteurs & coûts` : '';
 
       const vide = !p.dk && !p.swp && !p.dkpc;
       const hero = `<div class="kpi-grid">`
