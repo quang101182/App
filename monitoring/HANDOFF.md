@@ -1,6 +1,24 @@
 # HANDOFF — App/monitoring
 
-> 🧭 **07/11/2026 — état courant et RESTANT (avec déclencheurs)** : en tête de `D:/Download/02-Apps-Web/dashboard-refonte/DASHBOARD-REFONTE-ROADMAP.md` ; historique des versions : `CHANGELOG.md` (v2.55.0 → v2.60.0 le 07/11). Liste des liens : `data/liens.json` = source unique, lue aussi par `/apps` du bot Telegram.
+## 🔁 REPRISE — à lire en premier (écrit le 07/11/2026 22:20, dashboard v2.60.0 en ligne)
+
+**Phrase de reprise** (Quang la colle, un rappel d'agenda la lui donne) : « reprends le restant du dashboard (App/monitoring/HANDOFF.md) ».
+**Règle** : « fait » = `git log` + `CHANGELOG.md`. Ne refaire AUCUN lot déjà commité. Ici = seulement ce qui reste.
+
+| Quand (rappel Agenda) | À faire | Comment / pièges |
+|---|---|---|
+| **14/11 19:00** — ou dès la 1ʳᵉ inscription réelle | **Liste d'attente Restauration photo** sur l'accueil (inscrits, visites) | Site `faithfulphotorestoration.com`, worker de la session restauration (KV `FPR_WAITLIST`/`FPR_STATS`, lecture protégée par le secret `STATS_KEY`). Marque **hors Se7en AI** → la donnée passe par le worker PRIVÉ `D:/Download/02-Apps-Web/se7enai-hub/dash-worker/src/inject.js` (comme `YT_PRIVE`/`LIENS_PRIVE`), JAMAIS en clair dans ce dépôt (public). Lire d'abord le code du worker restauration (route exacte des stats — ne pas deviner). |
+| **22/11 19:00** — si la 3ᵉ vidéo DictoKey est sortie | **Installations venues de YouTube** (Play Console, `utm_source=youtube`) | La passerelle ne lit que `firstUserDefaultChannelGroup` (GA4) : « youtube » n'y apparaît pas en clair → source = rapport UTM Play Console. Sinon décaler d'une semaine. |
+| **27/11 19:00** — après le bilan t-shirt du 26/11 | **Carte « pub Etsy / visites / ventes »** NamaeAtelier | Données dans `projet-tshirt/` (veille Etsy, `lancement/PLAN-NOEL-2026.md`). Marque hors Se7en AI → worker privé. Adresse exacte de la boutique : à confirmer avec Quang (non trouvée le 07/11, Etsy bloque la vérification). |
+| sur demande de Quang | Colonne « visites 7 j » ; page publique `App/links/` périmée (NoteFlowing, NoCodeFlow, VoiceBox) | Visites 7 j : il faut d'abord historiser les compteurs publics. `App/links/` : demander si elle est encore liée (bio TikTok ?). |
+
+**Entretien courant** : ajouter/retirer une app = éditer `data/liens.json` (le bot `/apps` suit tout seul) ; un projet hors Se7en AI = `LIENS_PRIVE` du worker privé + `wrangler deploy`.
+**Bancs** (Playwright, jetons via `.claude/scripts/avec_secret.py`, jamais affichés) : 18 vues (9 onglets × PC/360 px) + 9 scénarios d'actualisation auto — modèles dans `CHANGELOG.md` v2.55.0 → v2.58.0. ⚠ Doser : les bancs partent de l'IP de Quang (429 du 07/11, corrigé côté passerelle PC v0.17.2).
+**GitHub Pages bloqué en « syncing_files »** : ne pas relancer en boucle, pousser un nouveau commit utile ; vérifier `curl github.io/... | grep VERSION`.
+
+Détail du chantier et décisions : `D:/Download/02-Apps-Web/dashboard-refonte/DASHBOARD-REFONTE-ROADMAP.md` (§ RESTANT) · historique : `CHANGELOG.md`.
+
+---
 Lot: R13 · 18 juillet 2026 · Claude (Opus 4.8) → 🏁 **REFONTE TERMINÉE — P0 à P6 tous livrés.** Bascule 16/07, surveillance 48 h, ancien archivé 18/07, P6 hygiène 18/07 (v2.15.0-p6). **Plus aucun lot en cours** ; restent 2 décisions produit pour Quang (MRR DictoKey · `Visite→vente` Factory).
 
 ## 🚨 BASCULE FAITE le 16/07/2026 — `dash.se7enai.com` sert `monitoring-v2.html` (**v2.15.0-p6** en ligne)
