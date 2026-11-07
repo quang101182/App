@@ -6,6 +6,15 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.53.0-youtube — 07/11/2026 · Studio : panneau « ▶ Chaînes YouTube »
+
+- Une ligne par chaîne (une chaîne par application, décision de Quang du 07/11) : lien vers la chaîne,
+  lien vers ses statistiques dans YouTube Studio, date d'ouverture, point de décision de sa feuille de route.
+- Liens seulement, aucun appel d'API. Liste `YT_CHANNELS` : @DictoKey pour l'instant.
+- ⛔ Fichier public : aucune chaîne de projet anonyme n'y est listée (cf. commentaire de `YT_CHANNELS`).
+
+---
+
 ## v2.52.0-studio-fige — 07/11/2026 · Studio : les chiffres TikTok disent leur âge
 
 - Le bloc « 📊 Performances TikTok » affichait le relevé du 17/09 sans alerte (date seulement en pied).

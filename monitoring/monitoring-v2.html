@@ -559,6 +559,13 @@
     .pf-m { color: var(--ink-muted); font-size: .73rem; white-space: nowrap; }
     .pf-delta { color: var(--good); }
     .pf-note { margin: 8px 0 0; color: var(--ink-muted); font-size: .71rem; line-height: 1.5; }
+    .yt-row { padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .yt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--ink); }
+    .yt-handle { color: var(--ink-muted); }
+    .yt-since { color: var(--ink-faint); font-size: .75rem; }
+    .yt-links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 6px; }
+    .yt-links a { color: var(--accent); text-decoration: none; font-size: .82rem; }
+    .yt-links a:hover { text-decoration: underline; }
     .pf-foot { margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--ink-muted); font-size: .72rem; }
     .st-perf-empty { margin: 0; color: var(--ink-muted); font-size: .79rem; }
     .st-lane { display: grid; gap: 8px; }
@@ -658,7 +665,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.52.0-studio-fige';
+    const VERSION = 'v2.53.0-youtube';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -746,6 +753,16 @@
     const STUDIO_CHANNELS = { tiktok: { label: 'TikTok', c: '#ff4d6d' }, instagram: { label: 'Instagram', c: '#e1306c' }, facebook: { label: 'Facebook', c: '#1877f2' } };
     const STUDIO_UPDATED = '2026-10-09T16:45';   // bumper à CHAQUE édition du planning ci-dessous
     const STUDIO_PERF_URL = 'data/analytics.json';
+    // v2.53.0 (07/11/2026) — CHAÎNES YOUTUBE : une par application (décision Quang du 07/11). Liens seulement,
+    // aucun appel d'API : les chiffres se lisent dans YouTube Studio (lien « Statistiques »).
+    // ⛔ CE FICHIER EST PUBLIC (dépôt `App`, compte quang101182) : n'ajouter ICI que des chaînes déjà liées
+    // publiquement à Se7en AI. JAMAIS une chaîne de projet anonyme (ex. affiliation frontaliers) : ce serait
+    // la rattacher publiquement au nom de Quang.
+    // `decision` = point de décision écrit dans la feuille de route de la chaîne (null si aucun).
+    const YT_CHANNELS = [
+      { app: 'DictoKey', color: 'var(--dk)', handle: '@DictoKey', id: 'UCYSKkats9aSBw1gp0brcHaA', opened: '2026-11-07',
+        decision: 'après 5 vidéos ou le 15/12/2026 : vues venues de la recherche + installations utm_source=youtube (Play Console)' }
+    ];
     const STUDIO_SCHEDULE = [
       { date: '2026-06-18', time: '19:30', project: 'DictoKey', lang: 'FR', channels: ['tiktok', 'instagram', 'facebook'], subs: false, music: null },
       { date: '2026-06-19', time: '21:00', project: 'StoryVoice', lang: 'FR', channels: ['tiktok'], subs: false, music: 'Better Times' },
@@ -3580,6 +3597,18 @@
         : '';
       return Panel('studio-perf', '📊 Performances TikTok', `${staleBar}${organicBlock}${boostedBlock}<div class="pf-foot">${foot}</div><p class="pf-note">Ce bloc couvre <b>tout le compte @se7en.ai</b> : il ne suit pas les filtres de l’agenda (le rollup n’a pas la notion de projet). Il ne couvre <b>ni @namaeatelier ni les chaînes YouTube</b> (une par application).</p>`, true);
     }
+    function renderYtChannels() {
+      const fmt = iso => iso.split('-').reverse().join('/');
+      const rows = YT_CHANNELS.map(c => {
+        const base = `https://www.youtube.com/channel/${encodeURIComponent(c.id)}`;
+        const studio = `https://studio.youtube.com/channel/${encodeURIComponent(c.id)}/analytics/tab-overview/period-default`;
+        return `<div class="yt-row" style="--product-color:${c.color}"><div class="yt-head"><span class="product-dot" aria-hidden="true"></span><b>${safeText(c.app)}</b><span class="yt-handle">${safeText(c.handle)}</span><span class="yt-since">ouverte le ${safeText(fmt(c.opened))}</span></div>`
+          + `<div class="yt-links"><a href="${base}/videos" target="_blank" rel="noopener">▶ Chaîne</a><a href="${studio}" target="_blank" rel="noopener">📈 Statistiques (Studio)</a></div>`
+          + (c.decision ? `<div class="pf-note">🎯 Point de décision : ${safeText(c.decision)}</div>` : '')
+          + `</div>`;
+      }).join('');
+      return Panel('studio-yt', '▶ Chaînes YouTube', `${rows}<p class="pf-note">Une chaîne par application. Chiffres dans YouTube Studio : ce bloc ne fait aucun relevé.</p>`, true);
+    }
     // '20260630-1912' — chaîne compacte sans fuseau, affichée brute par la prod. Formatée ici, sans prétendre connaître le fuseau du collecteur.
     function studioFmtSnap(s) {
       const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})$/.exec(String(s));
@@ -3660,7 +3689,7 @@
       const banner = (noneAhead && lastAll)
         ? `<div class="st-planning-bar"><span class="fb-ic">🎬</span><span>Aucune publication depuis le <b>${p2s(lastAll.getDate())}/${p2s(lastAll.getMonth() + 1)}/${lastAll.getFullYear()}</b> (${relativeTime(lastAll)}) et aucune de prévue — planning tenu à la main, dernière édition le ${suTxt}.</span></div>`
         : `<div class="st-planning-bar${suStale ? ' stale' : ''}"><span class="fb-ic">🎬</span><span>Planning tenu à la main — dernière édition le <b>${suTxt}</b> (${relativeTime(su)})${suStale ? ' — <b>périmé (&gt; 3 j)</b>' : ''}</span></div>`;
-      return `${banner}<div class="st-stats kpi-grid">${KpiTile('Prochain', nextTxt, upcoming.length ? 'post visible le plus proche' : 'aucun post à venir')}${KpiTile('7 prochains jours', wk, 'fenêtre glissante, pas la semaine calendaire')}${KpiTile('À venir', upcoming.length, 'après filtres')}</div>${renderStudioPerf(data)}${Panel('studio-lanes', '📡 Stratégie par canal', `<div class="st-lane">${lanes}</div>${pauseNote}`, true)}${fbar}<div class="st-agenda">${agenda}</div><p class="st-foot">Planning éditorial — les chiffres des plateformes viennent du seul rollup TikTok ci-dessus.</p>`;
+      return `${banner}<div class="st-stats kpi-grid">${KpiTile('Prochain', nextTxt, upcoming.length ? 'post visible le plus proche' : 'aucun post à venir')}${KpiTile('7 prochains jours', wk, 'fenêtre glissante, pas la semaine calendaire')}${KpiTile('À venir', upcoming.length, 'après filtres')}</div>${renderYtChannels()}${renderStudioPerf(data)}${Panel('studio-lanes', '📡 Stratégie par canal', `<div class="st-lane">${lanes}</div>${pauseNote}`, true)}${fbar}<div class="st-agenda">${agenda}</div><p class="st-foot">Planning éditorial — les chiffres des plateformes viennent du seul rollup TikTok ci-dessus.</p>`;
     }
 
     function renderApp(app, data) {
