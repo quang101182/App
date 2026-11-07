@@ -6,6 +6,19 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.60.0-liens — 07/11/2026 · Page « Mes apps & liens » (source unique avec le bot Telegram)
+
+- Nouvelle page sous la Vue d'ensemble : Télécharger · Apps web · Sites des produits · Pilotage · Projets hors Se7en AI
+  (worker privé `LIENS_PRIVE`) · Chaînes YouTube. Raccourci « Mes apps & liens → » depuis l'accueil.
+- **Source unique `data/liens.json`**, lue aussi par `/apps` du bot (n8n) : mettre la liste à jour ici met le bot à
+  jour. Fichier public : jamais de lien anonyme ni de secret (le Dossier Vietnam reste dans `/liens` côté n8n).
+- Inventaire du 07/11 : `/apps` listait 16 « web apps » dont 8 en 404 (dossiers techniques du dépôt) et 0 APK
+  (plus aucun APK publié) ; `/liens` proposait NoteFlowing, NoCodeFlow, The Unseen Child (arrêtés). 18 liens
+  publics + 4 privés vérifiés en 200.
+- Repli d'une adresse inconnue : explicitement vers l'accueil (la page des liens est désormais en tête de la liste).
+
+---
+
 ## v2.59.0-cout — 07/11/2026 · Un seul coût du mois DictoKey (le juste)
 
 - Décision « au plus pragmatique » (Quang) : dictées au **coût réel par moteur** (`/admin/stt-cout`, app `dk`, mois

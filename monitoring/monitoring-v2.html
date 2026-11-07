@@ -621,6 +621,14 @@
       .freshbar .fresh-long { display: none; }
       .freshbar .fresh-action { margin-left: auto; padding-top: 0; flex-basis: auto; }
     }
+    /* v2.60.0 — « Mes apps & liens » : cartes cliquables en grille, 1 colonne sur téléphone */
+    .lien-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+    .lien-carte { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); text-decoration: none; transition: border-color .15s, background .15s; }
+    .lien-carte:hover { border-color: rgba(58, 160, 255, .45); background: var(--surface-raised); }
+    .lien-carte b { font-size: .92rem; overflow-wrap: anywhere; }
+    .lien-carte span { color: var(--ink-faint); font-size: .74rem; }
+    .lien-tg { color: var(--ink-faint); font-size: .72rem; }
+    @media (max-width: 640px) { .lien-grille { grid-template-columns: 1fr 1fr; } }
     /* v2.55.0 — accueil : tableau compact des produits (remplace les grosses cartes à cumuls depuis l'origine) */
     .home-table { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
     .home-row { display: grid; grid-template-columns: minmax(150px, 1.5fr) repeat(4, minmax(0, 1fr)) 16px; gap: 10px; align-items: center; padding: 11px 16px; border-top: 1px solid var(--line); color: var(--ink); text-decoration: none; }
@@ -743,9 +751,10 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.59.0-cout';
+    const VERSION = 'v2.60.0-liens';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
+      { key: 'liens', name: 'Mes apps & liens', icon: '🔗', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Tout ce qui s’ouvre ou se télécharge : apps, installeurs, sites, chaînes YouTube.', sections: [] },
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Toutes les apps en un coup d’œil, chargées à l’ouverture.', sections: [] },
       { key: 'dk', name: 'DictoKey', icon: '⌨', family: 'products', color: PRODUCT_COLORS.dk, auth: 'token', tokenKey: 'monitoring_admin_token', endpoints: {}, subtitle: 'Adoption, rétention, revenus et infrastructure.', sections: [] },
       // `role: 'repos'` (contexte Quang, 16/07) — CE PROJET EST UN HOBBY, mené au rythme choisi : la mise en
@@ -782,7 +791,7 @@
     // v2.57.0 — menu de la maquette v0.3 : Factory (arrêtée le 16/09) et Studio (figé depuis le 09/10) passent en
     // « Archives » — rien n'est supprimé, ils ne sont plus mis au même niveau que les outils vivants.
     const FAMILY_LABELS = { products: 'Produits', acquisition: 'Audience', ops: 'Ops', archives: 'Archives' };
-    const NAV_ORDER = ['dk', 'dkpc', 'swp', 'sv'];   // DictoKey PC rangé SOUS DictoKey (même produit)
+    const NAV_ORDER = ['home', 'liens', 'dk', 'dkpc', 'swp', 'sv'];   // DictoKey PC rangé SOUS DictoKey (même produit)
     const NAV_SUB = { dkpc: 'PC (Windows)' };
     const NAV_TAG = { factory: 'arrêtée', studio: 'figé' };
 
@@ -1008,7 +1017,7 @@
         return true;
       } catch (e) { return false; }
     }
-    function getApp(key) { return APPS.find(app => app.key === key) || APPS[0]; }
+    function getApp(key) { return APPS.find(app => app.key === key) || APPS.find(app => app.key === 'home'); }   // v2.60.0 : repli EXPLICITE sur l'accueil (APPS[0] n'est plus l'accueil)
     function safeText(value) { return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); }
     function formatDate(date) { return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(date); }
     function relativeTime(date) { const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000)); return seconds < 60 ? "à l'instant" : seconds < 3600 ? `il y a ${Math.floor(seconds / 60)} min` : seconds < 86400 ? `il y a ${Math.floor(seconds / 3600)} h` : `il y a ${Math.floor(seconds / 86400)} j`; }
@@ -1159,7 +1168,28 @@
         return { perf: null, perfError: e.message || String(e) };   // le planning reste lisible sans le rollup
       }
     }
+    // v2.60.0 (07/11/2026, accord de Quang) — « Mes apps & liens ». SOURCE UNIQUE : data/liens.json, lue AUSSI par la
+    // commande /apps du bot Telegram (n8n, noeud code-apps) → une mise à jour ici met le bot à jour. Fichier public :
+    // les projets hors Se7en AI arrivent par le worker privé (window.__LIENS_PRIVE), jamais par ce fichier.
+    const LIENS_URL = 'data/liens.json';
+    async function fetchLiens(signal) {
+      const r = await fetch(`${LIENS_URL}?t=${Date.now()}`, { signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return { liens: await r.json() };
+    }
+    function renderLiensView(data) {
+      const d = data && data.liens;
+      if (!d || !Array.isArray(d.groupes)) return EmptyState('Mes apps & liens', `Liste ${LIENS_URL} illisible.`);
+      const carte = l => `<a class="lien-carte" href="${safeText(l.url)}" target="_blank" rel="noopener"><b>${safeText(l.nom)}</b>${l.note ? `<span>${safeText(l.note)}</span>` : ''}</a>`;
+      const groupe = (titre, liens, extra = '') => `<section class="section"><div class="section-head"><h2>${safeText(titre)}</h2>${extra}</div><div class="lien-grille">${liens.map(carte).join('')}</div></section>`;
+      const prive = Array.isArray(window.__LIENS_PRIVE) ? window.__LIENS_PRIVE : [];
+      return d.groupes.map(g => groupe(g.titre, g.liens || [], g.telegram ? '<span class="lien-tg">aussi dans /apps (Telegram)</span>' : '')).join('')
+        + (prive.length ? groupe('Projets hors Se7en AI', prive) : '')
+        + `<section class="section"><div class="section-head"><h2>Chaînes YouTube</h2></div>${renderYtChannels()}</section>`
+        + `<p class="acq-when">Liste tenue dans <code>${LIENS_URL}</code> (mise à jour le ${safeText(isoFr(d.version || '') || '?')}) — la même que la commande /apps du bot.</p>`;
+    }
     async function fetchApp(cfg, signal) {
+      if (cfg.key === 'liens') return fetchLiens(signal);
       if (cfg.key === 'acq') return fetchAcq(signal);
       if (cfg.key === 'home') return fetchHome(signal);
       if (cfg.key === 'dk') return fetchDk(cfg, signal);
@@ -3686,7 +3716,7 @@
       return `<section class="section">${hero}</section>`
         + `<section class="section"><div class="section-head"><h2>À surveiller</h2></div><div class="alert-list">${alertList}</div></section>`
         + `<section class="section"><div class="section-head"><h2>Produits</h2><a href="#acq">Acquisition →</a></div><div class="home-table">${rows}</div></section>`
-        + `<section class="section"><div class="section-head"><h2>Chaînes YouTube</h2></div>${renderYtChannels()}</section>`;
+        + `<section class="section"><div class="section-head"><h2>Chaînes YouTube</h2><a href="#liens">Mes apps & liens →</a></div>${renderYtChannels()}</section>`;
     }
     function renderPlaceholder(app) { const tokenHint = app.auth === 'token' ? 'Cette vue restera token-gated au branchement des données.' : 'Cette vue utilisera uniquement ses données publiques au branchement.'; return `<section class="placeholder"><div class="placeholder-inner"><span class="placeholder-icon" aria-hidden="true">◌</span><h2>${safeText(app.name)} — vue prête au branchement</h2><p>${safeText(tokenHint)} Le socle P0 ne déclenche aucune requête réseau.</p></div></section><section class="section">${Panel(`architecture-${app.key}`, 'Contrat de données préparé', `<p>Config déclarative disponible dans <code>APPS[]</code> : authentification, endpoints et sections. Le rendu métier sera ajouté dans le lot dédié.</p>`, true)}</section>`; }
     // ── P4 / Factory — rendu ────────────────────────────────────────────────────
@@ -3954,6 +3984,7 @@
       else if (err && /401/.test(err)) content = TokenGate(app, 'Session expirée ou token invalide (401). Colle un token valide.');
       else if (err) content = EmptyState(app.name, `Échec du chargement : ${err}`);
       else if (app.key === 'home') content = renderHome(data);
+      else if (app.key === 'liens') content = renderLiensView(data);
       else if (app.key === 'acq') content = renderAcq(data);
       else if (app.key === 'swp') content = renderSwpView(data);
       else if (app.key === 'sv') content = renderSvView(data);
