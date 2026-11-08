@@ -6,6 +6,14 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.62.0-auto — 08/11/2026 · Plus rien en tâche de fond
+
+- Quang : « ça ne sert à rien qu'elle se fasse en tâche de fond ». Retrait du contrôle chaque minute (page ouverte) :
+  les chiffres se mettent à jour en entrant dans une page ou en revenant sur l'onglet, s'ils ont plus de 5 min.
+  L'interrupteur « Auto » et le bouton « Actualiser » sont inchangés. Plus aucun `setInterval` dans la page.
+
+---
+
 ## v2.61.1-maj — 08/11/2026 · Vérification allégée
 
 - Quang : « ça ne doit pas être lourd ». Une vérification = la page entière (~106 Ko gzip). Plus aucun contrôle
