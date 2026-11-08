@@ -751,7 +751,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.60.0-liens';
+    const VERSION = 'v2.61.0-maj';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'liens', name: 'Mes apps & liens', icon: '🔗', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Tout ce qui s’ouvre ou se télécharge : apps, installeurs, sites, chaînes YouTube.', sections: [] },
@@ -4211,6 +4211,30 @@
     window.addEventListener('hashchange', onHashChange);
     document.addEventListener('visibilitychange', autoVerifier);   // v2.58.0 : retour sur l'onglet → mise à jour si > 5 min
     setInterval(autoVerifier, 60000);
+    // v2.61.0 — NOUVELLE VERSION EN LIGNE (Quang 08/11/2026 : « la page ne se rafraîchit pas, c'est moi qui dois le
+    // déclencher »). Un onglet resté ouvert garde le CODE qu'il a chargé : celui ouvert avant la v2.58.0 n'avait pas
+    // l'actualisation auto et ne l'aurait jamais eue. La page relit donc sa propre adresse (servie en no-store par le
+    // worker) au retour sur l'onglet et toutes les 10 min si visible ; nouvelle VERSION → rechargement, mais jamais
+    // pendant une saisie, un détail d'appareil ouvert ou une requête. Rien n'est perdu : chiffres, panneaux et page
+    // courante (hash) sont déjà mémorisés. Échec réseau ou session Access expirée → on ne fait rien.
+    const MAJ_INTERVALLE_MS = 10 * 60 * 1000;
+    let majDerniere = 0, majEnCours = false;
+    async function verifierNouvelleVersion(force) {
+      if (majEnCours || document.visibilityState !== 'visible') return;
+      if (!force && Date.now() - majDerniere < MAJ_INTERVALLE_MS) return;
+      majEnCours = true; majDerniere = Date.now();
+      try {
+        const r = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store', credentials: 'same-origin', redirect: 'error' });
+        if (!r.ok) return;
+        const m = (await r.text()).match(/const VERSION = '([^']+)'/);
+        if (!m || m[1] === VERSION) return;
+        if (state.controller || dkExpanded.size || /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '')) { majDerniere = 0; return; }
+        location.reload();
+      } catch (e) { /* hors ligne, Access expiré (redirection) : on réessaiera */ }
+      finally { majEnCours = false; }
+    }
+    document.addEventListener('visibilitychange', () => verifierNouvelleVersion(true));
+    setInterval(() => verifierNouvelleVersion(false), 60000);
     majInterrupteurs();
     route(location.hash.slice(1) || 'home');
   </script>

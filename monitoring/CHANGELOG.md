@@ -6,6 +6,20 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.61.0-maj — 08/11/2026 · Un onglet resté ouvert se met à jour tout seul
+
+- Constat de Quang (téléphone et PC) : un onglet déjà ouvert ne se rafraîchit pas. Cause : un onglet garde le CODE
+  qu'il a chargé ; ceux ouverts avant la v2.58.0 (07/11 21:18) n'avaient pas l'actualisation auto et ne l'auraient
+  jamais eue. Le mécanisme des chiffres (v2.58.0) n'était pas en cause.
+- La page relit sa propre adresse (no-store côté worker) au retour sur l'onglet et toutes les 10 min si visible ;
+  nouvelle `VERSION` → rechargement, jamais pendant une saisie, un détail d'appareil ouvert ou une requête (réessai
+  au contrôle suivant). Panne réseau ou session Access expirée (redirection) → rien.
+- Banc local (serveur qui publie une version pendant que la page est ouverte) : 8/8 (même version, panne, saisie
+  en cours puis terminée, page conservée, intervalle, 0 erreur JS) ; mutation sans `location.reload()` → 2 rouges.
+- ⚠ Dernière fois : les onglets ouverts AVANT la v2.61.0 doivent être rechargés une fois à la main.
+
+---
+
 ## v2.60.0-liens — 07/11/2026 · Page « Mes apps & liens » (source unique avec le bot Telegram)
 
 - Nouvelle page sous la Vue d'ensemble : Télécharger · Apps web · Sites des produits · Pilotage · Projets hors Se7en AI
