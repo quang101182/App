@@ -33,7 +33,7 @@ export const APPS_STT = {
 };
 
 /** Ressource Azure Foundry (northeurope) — pas un secret ; surchargeable par cfg:mai_endpoint. */
-export const MAI_ENDPOINT_DEFAUT = 'https://soustitrage-mai.cognitiveservices.azure.com';
+export const MAI_ENDPOINT_DEFAUT = 'https://subwhisper-pro-mai.cognitiveservices.azure.com';   // 08/11/2026 : soustitrage-mai supprimée
 export const MAI_CHEMIN = '/speechtotext/transcriptions:transcribe?api-version=2025-10-15';
 /** D7 : clé dédiée au sous-titrage si elle existe, sinon celle déjà en place. */
 export const MAI_CLES = ['AZURE_SPEECH_KEY'];
