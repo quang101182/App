@@ -6,6 +6,13 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.61.1-maj — 08/11/2026 · Vérification allégée
+
+- Quang : « ça ne doit pas être lourd ». Une vérification = la page entière (~106 Ko gzip). Plus aucun contrôle
+  périodique : seulement au retour sur l'onglet, au plus une fois par 10 min.
+
+---
+
 ## v2.61.0-maj — 08/11/2026 · Un onglet resté ouvert se met à jour tout seul
 
 - Constat de Quang (téléphone et PC) : un onglet déjà ouvert ne se rafraîchit pas. Cause : un onglet garde le CODE
