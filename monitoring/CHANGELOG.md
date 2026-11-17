@@ -6,6 +6,12 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.63.0-moonwick — 17/11/2026 · Moonwick dans « Mes apps & liens »
+
+- Nouveau groupe « Moonwick (jeu de cartes) » dans `data/liens.json` : site moonwickgame.com, codex des cartes (lien privé), chaîne YouTube @moonwickgame, TikTok d'atelier.
+- Chaîne @moonwickgame ajoutée aux « Chaînes YouTube ».
+- Règle d'anonymat précisée : Moonwick n'est pas un projet anonyme (décision Quang 17/11) ; elle reste entière pour les projets à séparer de son nom.
+
 ## v2.62.0-auto — 08/11/2026 · Plus rien en tâche de fond
 
 - Quang : « ça ne sert à rien qu'elle se fasse en tâche de fond ». Retrait du contrôle chaque minute (page ouverte) :
