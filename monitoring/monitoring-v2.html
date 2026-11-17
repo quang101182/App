@@ -751,7 +751,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.63.0-moonwick';
+    const VERSION = 'v2.64.0-liens';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'liens', name: 'Mes apps & liens', icon: '🔗', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Tout ce qui s’ouvre ou se télécharge : apps, installeurs, sites, chaînes YouTube.', sections: [] },
@@ -1031,7 +1031,7 @@
     // P1 — Acquisition : 8 compteurs publics cookieless (gateway-pro), SANS token, fallback neutre par compteur.
     const ACQ_GATEWAY = 'https://api-gateway-pro.quang101182.workers.dev';
     async function fetchAcq(signal) {
-      const slugs = ['se7', 'dk', 'swp', 'sv'];
+      const slugs = ['se7', 'dk', 'swp', 'sv', 'lnk'];  // v2.64.0 : + page de liens (bio TikTok)
       const calls = [];
       slugs.forEach(slug => {
         calls.push(fetch(`${ACQ_GATEWAY}/api/visit?page=${slug}`, { signal }).then(r => r.json()).catch(() => ({ total: 0, today: 0 })));
@@ -1050,7 +1050,7 @@
       // en lecture publique, sans token, CORS ouvert. Il n'était lu nulle part : à l'ouverture, la
       // question « est-ce que des gens l'ont téléchargé ? » n'avait pas de réponse dans le dashboard.
       const dlReal = await fetchOndineDownloads(signal);
-      return { se7: { visit: r[0], clicks: r[1], leads, dlReal }, dk: { visit: r[2], clicks: r[3] }, swp: { visit: r[4], clicks: r[5] }, sv: { visit: r[6], clicks: r[7] }, generatedAt: Date.now() };
+      return { se7: { visit: r[0], clicks: r[1], leads, dlReal }, dk: { visit: r[2], clicks: r[3] }, swp: { visit: r[4], clicks: r[5] }, sv: { visit: r[6], clicks: r[7] }, lnk: { visit: r[8], clicks: r[9] }, generatedAt: Date.now() };
     }
 
     // Téléchargements RÉELS d'Ondine (GitHub Releases) + historique quotidien pour le delta.
@@ -1274,7 +1274,10 @@
     const ACQ_META = {
       dk:  { name: 'DictoKey',       url: 'https://dictokey.com',                 color: 'var(--dk)',  outMode: 'total', outNote: 'vers Play Store' },
       swp: { name: 'SubWhisper Pro', url: 'https://sub-whisper.com/landing.html', color: 'var(--swp)', outMode: 'out',   outNote: 'vers checkout' },
-      sv:  { name: 'StoryVoice',     url: 'https://storiesvoice.org',             color: 'var(--sv)',  outMode: 'out',   outNote: 'vers checkout / app' }
+      sv:  { name: 'StoryVoice',     url: 'https://storiesvoice.org',             color: 'var(--sv)',  outMode: 'out',   outNote: 'vers checkout / app' },
+      // v2.64.0 (17/11/2026) : page de liens de la bio TikTok (se7enai-hub/site/liens.html, slug `lnk`, gateway-pro).
+      // Elle émettait visites + source + clics `out:<app>` depuis sa mise en ligne ; le dashboard ne la lisait pas.
+      lnk: { name: 'Page de liens (bio TikTok)', url: 'https://se7enai.com/liens', color: '#d9622b', outMode: 'out', outNote: 'vers les apps', showSrc: true }
     };
     // Dénominateur minimal pour OSER afficher un taux (même principe que FACTORY_MIN_DENOM).
     const ACQ_MIN_DENOM = 30;
@@ -1455,7 +1458,7 @@
       return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → téléchargement → clic sortant.</p>${recap}${dlByTag}${dlHint}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}${rescueTxt}${gapTxt}${srcDetail}${donateTxt}${dlLegacy}`;
     }
     function renderAcqSites(data) {
-      return ['dk', 'swp', 'sv'].map(key => {
+      return ['lnk', 'dk', 'swp', 'sv'].map(key => {
         const m = ACQ_META[key], d = data[key] || {};
         const visit = d.visit || { total: 0, today: 0 };
         const clicks = d.clicks || { total: 0, by_btn_all: {} };
@@ -1466,7 +1469,12 @@
         else { Object.keys(bb).forEach(b => { if (b.indexOf('out:') === 0) { const v = acqInt(bb[b]); outTotal += v; outParts.push({ name: b.slice(4), v }); } }); }
         outParts.sort((a, b) => b.v - a.v);
         const w = vTot > 0 ? Math.max(2, Math.min(100, Math.round((outTotal / vTot) * 100))) : 0;
-        const detail = outParts.length ? `<div class="acq-detail">Détail : ${outParts.map(o => `${safeText(o.name)} <strong>${o.v}</strong>`).join(' · ')}</div>` : '';
+        let detail = outParts.length ? `<div class="acq-detail">Détail : ${outParts.map(o => `${safeText(o.name)} <strong>${o.v}</strong>`).join(' · ')}</div>` : '';
+        if (m.showSrc) {
+          const bs = visit.by_src || {};
+          const sp = Object.keys(bs).map(k => ({ name: k, v: acqInt(bs[k]) })).filter(o => o.v > 0).sort((a, b) => b.v - a.v);
+          detail = `<div class="acq-detail">Origine des visites : ${sp.length ? sp.map(o => `${safeText(o.name)} <strong>${o.v}</strong>`).join(' · ') : '<span style="opacity:.75">rien encore</span>'}</div>` + detail;
+        }
         return `<article class="acq-site" style="--product-color:${m.color}"><div class="acq-site-head"><a href="${m.url}" target="_blank" rel="noopener">${safeText(m.name)} ↗</a><span class="acq-rate">taux sortant <strong>${acqPct(outTotal, vTot)}</strong></span></div><div class="acq-metrics"><div><span class="acq-mlabel">Visites</span><span class="acq-mvalue">${vTot}</span><span class="acq-mnote">${vToday > 0 ? `+${vToday} auj.` : '—'}</span></div><div><span class="acq-mlabel">Clics sortants</span><span class="acq-mvalue acq-out">${outTotal}</span><span class="acq-mnote">${safeText(m.outNote)}</span></div></div><div class="acq-progress"><i style="width:${w}%"></i></div>${detail}</article>`;
       }).join('');
     }
@@ -2292,11 +2300,11 @@
     function acqTotals(acq) {
       if (!acq) return null;
       let visites = 0, today = 0;
-      ['se7', 'dk', 'swp', 'sv'].forEach(k => { const v = (acq[k] && acq[k].visit) || {}; visites += acqInt(v.total); today += acqInt(v.today); });
+      ['se7', 'dk', 'swp', 'sv', 'lnk'].forEach(k => { const v = (acq[k] && acq[k].visit) || {}; visites += acqInt(v.total); today += acqInt(v.today); });
       const hb = (acq.se7 && acq.se7.clicks && acq.se7.clicks.by_btn_all) || {};
       const engagement = acqInt(hb['f:demo']) + acqInt(hb['f:chat']) + acqInt(hb['f:cta']);
       const hubOut = Object.keys(hb).reduce((sum, k) => k.indexOf('out:') === 0 ? sum + acqInt(hb[k]) : sum, 0);
-      const sortants = hubOut + ['dk', 'swp', 'sv'].reduce((sum, k) => sum + acqSiteOut(acq, k), 0);
+      const sortants = hubOut + ['dk', 'swp', 'sv', 'lnk'].reduce((sum, k) => sum + acqSiteOut(acq, k), 0);
       return { visites, today, engagement, sortants };
     }
     // Agrégats produit pour la Home. La Home est TOKEN-LESS (décision roadmap §4) : elle ne fetche JAMAIS

@@ -6,6 +6,11 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.64.0-liens — 17/11/2026 · Page de liens de la bio TikTok
+
+- Vue Acquisition : nouvelle carte « Page de liens (bio TikTok) » (`se7enai.com/liens`, slug `lnk`, gateway-pro) : visites, origine (`?src=tiktok`…), clics sortants par app. La page émettait ces compteurs depuis sa mise en ligne, mais le dashboard ne les lisait pas.
+- Les totaux de l'accueil (visites, sortants) l'incluent.
+
 ## v2.63.0-moonwick — 17/11/2026 · Moonwick dans « Mes apps & liens »
 
 - Nouveau groupe « Moonwick (jeu de cartes) » dans `data/liens.json` : site moonwickgame.com, codex des cartes (lien privé), chaîne YouTube @moonwickgame, TikTok d'atelier.
